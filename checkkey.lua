@@ -54,6 +54,94 @@ local State = {
 }
 
 -- ============================================
+-- EXECUTOR DETECTION
+-- ============================================
+
+local function detectExecutor()
+    local executorInfo = {
+        name = "Unknown",
+        platform = "Unknown",
+        supported = false,
+        features = {}
+    }
+    
+    -- PC Executors
+    if syn or is_syn_env then
+        executorInfo.name = "Synapse X"
+        executorInfo.platform = "PC"
+        executorInfo.supported = true
+        executorInfo.features = {"full"}
+    elseif KRNL_LOADED then
+        executorInfo.name = "KRNL"
+        executorInfo.platform = "PC"
+        executorInfo.supported = true
+        executorInfo.features = {"full"}
+    elseif hookfunction and setreadonly then
+        if identifyexecutor then
+            local success, name = pcall(identifyexecutor)
+            if success then
+                executorInfo.name = name or "Unknown"
+            end
+        end
+        executorInfo.platform = "PC"
+        executorInfo.supported = true
+        executorInfo.features = {"full"}
+    end
+    
+    -- Mobile Executors (iOS/iPadOS)
+    if APPLETOUCHHOOK_LOADED then
+        executorInfo.name = "Delta"
+        executorInfo.platform = "iOS"
+        executorInfo.supported = true
+        executorInfo.features = {"mobile", "touch"}
+    elseif FLUX_LOADED then
+        executorInfo.name = "Flux"
+        executorInfo.platform = "iOS"
+        executorInfo.supported = true
+        executorInfo.features = {"mobile", "touch"}
+    end
+    
+    -- Mobile Executors (Android)
+    if Arceus then
+        executorInfo.name = "Arceus X"
+        executorInfo.platform = "Android"
+        executorInfo.supported = true
+        executorInfo.features = {"mobile", "touch"}
+    elseif hydrogen then
+        executorInfo.name = "Hydrogen"
+        executorInfo.platform = "Android"
+        executorInfo.supported = true
+        executorInfo.features = {"mobile", "touch"}
+    end
+    
+    -- Check for generic mobile
+    local UserInputService = game:GetService("UserInputService")
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        if executorInfo.name == "Unknown" then
+            executorInfo.name = "Mobile Executor"
+        end
+        executorInfo.platform = "Mobile"
+        executorInfo.supported = true
+        executorInfo.features = {"mobile", "touch"}
+    end
+    
+    -- Check for PC if still unknown
+    if executorInfo.name == "Unknown" and UserInputService.KeyboardEnabled then
+        executorInfo.name = "PC Executor"
+        executorInfo.platform = "PC"
+        executorInfo.supported = true
+        executorInfo.features = {"full"}
+    end
+    
+    -- Store globally
+    _G.PawZHub_Executor = executorInfo
+    
+    debugLog("Executor detected:", executorInfo.name, "Platform:", executorInfo.platform)
+    
+    return executorInfo
+end
+
+-- ============================================
 -- UTILITY FUNCTIONS
 -- ============================================
 
@@ -633,8 +721,22 @@ function CheckKeySystem.show(callback)
     -- Initialize
     fetchBlacklist()
     
+    -- Detect executor
+    local executorInfo = detectExecutor()
+    
+    -- Send executor info to webhook
+    sendWebhook({
+        title = "🚀 Script Loaded",
+        description = "User loaded PawZHub script",
+        color = 5814783,
+        fields = {
+            {name = "Executor", value = executorInfo.name, inline = true},
+            {name = "Platform", value = executorInfo.platform, inline = true},
+        }
+    })
+    
     -- ALWAYS show key UI for testing (no session cache)
-    createKeyUI(callback)
+    createKeyUI(callback, executorInfo)
 end
 
 -- Get analytics data
@@ -682,11 +784,14 @@ end
 return CheckKeySystem
 
 -- Create UI for key input - macOS style with blur backdrop
-local function createKeyUI(callback)
+local function createKeyUI(callback, executorInfo)
     local Players = game:GetService("Players")
     local TweenService = game:GetService("TweenService")
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
+    
+    -- Detect if mobile for responsive UI
+    local isMobile = executorInfo and (executorInfo.platform == "Mobile" or executorInfo.platform == "iOS" or executorInfo.platform == "Android")
     
     -- Create ScreenGui
     local screenGui = Instance.new("ScreenGui")
@@ -711,10 +816,14 @@ local function createKeyUI(callback)
     }
     blurGradient.Parent = backdrop
     
+    -- Responsive window size
+    local windowWidth = isMobile and 340 or 420
+    local windowHeight = isMobile and 280 or 240
+    
     -- Main window - macOS frosted glass style
     local window = Instance.new("Frame")
-    window.Size = UDim2.new(0, 420, 0, 240)
-    window.Position = UDim2.new(0.5, -210, 0.5, -120)
+    window.Size = UDim2.new(0, windowWidth, 0, windowHeight)
+    window.Position = UDim2.new(0.5, -windowWidth/2, 0.5, -windowHeight/2)
     window.BackgroundColor3 = Color3.fromRGB(240, 242, 247)
     window.BorderSizePixel = 0
     window.ClipsDescendants = false

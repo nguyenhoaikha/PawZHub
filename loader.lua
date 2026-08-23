@@ -105,6 +105,45 @@ end
 
 -- Main execution
 local function main()
+    -- Detect executor first
+    local executorName = "Unknown"
+    local executorPlatform = "Unknown"
+    pcall(function()
+        local UserInputService = game:GetService("UserInputService")
+        
+        if syn or is_syn_env then
+            executorName = "Synapse X"
+            executorPlatform = "PC"
+        elseif KRNL_LOADED then
+            executorName = "KRNL"
+            executorPlatform = "PC"
+        elseif identifyexecutor then
+            executorName = identifyexecutor() or "Unknown"
+            executorPlatform = "PC"
+        elseif APPLETOUCHHOOK_LOADED then
+            executorName = "Delta"
+            executorPlatform = "iOS"
+        elseif FLUX_LOADED then
+            executorName = "Flux"
+            executorPlatform = "iOS"
+        elseif Arceus then
+            executorName = "Arceus X"
+            executorPlatform = UserInputService.TouchEnabled and "Android" or "PC"
+        elseif hydrogen then
+            executorName = "Hydrogen"
+            executorPlatform = "Android"
+        elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+            executorName = "Mobile Executor"
+            executorPlatform = "Mobile"
+        elseif UserInputService.KeyboardEnabled then
+            executorName = "PC Executor"
+            executorPlatform = "PC"
+        end
+    end)
+    
+    print("Executor:", executorName, "Platform:", executorPlatform)
+    _G.PawZHub_Executor = {name = executorName, platform = executorPlatform}
+    
     -- Detect game
     local gameData = detectGame()
     
