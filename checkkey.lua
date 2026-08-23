@@ -267,27 +267,10 @@ local function verifyKeyRemote(key)
         end
     else
         if CONFIG.ALLOW_OFFLINE_MODE then
-            return CheckKeySystem.verifyKeyFallback(key)
+            return verifyKeyOffline(key)  -- Gọi local function thay vì CheckKeySystem.
         end
         return false, "Server unreachable"
     end
-end
-
-function CheckKeySystem.verifyKeyFallback(key)
-    local validKeys = {
-        ["PAWZ-FREE-2024-DEMO1"] = { tier = "free", expiry = nil, features = {"basic"} },
-        ["PAWZ-PREM-2024-TEST"] = { tier = "premium", expiry = os.time() + 30*24*3600, features = {"basic","advanced"} },
-        ["PAWZ-LIFE-2024-VIP1"] = { tier = "lifetime", expiry = nil, features = {"basic","advanced","premium","exclusive"} },
-    }
-
-    local keyData = validKeys[key]
-    if keyData then
-        if keyData.expiry and os.time() > keyData.expiry then
-            return false, "Key expired"
-        end
-        return true, "Valid (offline)", keyData
-    end
-    return false, "Invalid key"
 end
 
 -- ============================================
