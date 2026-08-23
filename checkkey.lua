@@ -420,45 +420,45 @@ local function createKeyUI(callback, executorInfo)
     screenGui.Name = "PawZHubKeySystem"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.IgnoreGuiInset = true  -- Fullscreen
+    screenGui.IgnoreGuiInset = true
 
-    -- NO BACKDROP - Bỏ backdrop đen mờ che game
-
-    -- Window
+    -- Window (NO BACKDROP - chỉ window, không che game)
     local window = Instance.new("Frame")
     window.Size = UDim2.new(0, windowWidth, 0, windowHeight)
     window.Position = UDim2.new(0.5, -windowWidth / 2, 0.5, -windowHeight / 2)
     window.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     window.BorderSizePixel = 0
     window.Parent = screenGui
-    window.ClipsDescendants = false  -- Cho phép shadow
+    window.ClipsDescendants = false
+    window.Active = true  -- Cho phép drag
 
     Instance.new("UICorner", window).CornerRadius = UDim.new(0, 12)
 
     local windowBorder = Instance.new("UIStroke", window)
-    windowBorder.Color = Color3.fromRGB(70, 75, 85)  -- Border sáng hơn
+    windowBorder.Color = Color3.fromRGB(70, 75, 85)
     windowBorder.Thickness = 2
-    windowBorder.Transparency = 0
 
-    -- Shadow (drop shadow effect) - Gắn vào window thay vì screenGui
-    local shadow = Instance.new("ImageLabel")
-    shadow.Size = UDim2.new(1, 50, 1, 50)
-    shadow.Position = UDim2.new(0, -25, 0, 15)
-    shadow.BackgroundTransparency = 1
-    shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
-    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.ImageTransparency = 0.6
-    shadow.ScaleType = Enum.ScaleType.Slice
-    shadow.SliceCenter = Rect.new(10, 10, 10, 10)
+    -- Shadow
+    local shadow = Instance.new("Frame")
+    shadow.Size = UDim2.new(1, 30, 1, 30)
+    shadow.Position = UDim2.new(0, -15, 0, 10)
+    shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.BackgroundTransparency = 0.7
+    shadow.BorderSizePixel = 0
     shadow.ZIndex = -1
     shadow.Parent = window
+    
+    local shadowCorner = Instance.new("UICorner", shadow)
+    shadowCorner.CornerRadius = UDim.new(0, 12)
 
     -- Title bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 44)
-    titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)  -- Title bar tối
+    titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     titleBar.BorderSizePixel = 0
     titleBar.Parent = window
+    titleBar.Active = true
+    titleBar.Draggable = false  -- Sẽ tự code drag
 
     local titleBarCorner = Instance.new("UICorner", titleBar)
     titleBarCorner.CornerRadius = UDim.new(0, 12)
@@ -468,6 +468,7 @@ local function createKeyUI(callback, executorInfo)
     titleBarCover.Position = UDim2.new(0, 0, 1, -12)
     titleBarCover.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     titleBarCover.BorderSizePixel = 0
+    titleBarCover.ZIndex = titleBar.ZIndex + 1
     titleBarCover.Parent = titleBar
 
     -- Traffic lights (macOS style với chức năng)
@@ -936,13 +937,18 @@ local function createKeyUI(callback, executorInfo)
                 task.wait(0.8)
                 local session = createSession(key, keyData)
 
-                -- Fade out with rotation
+                -- Fade out with rotation (NO BACKDROP)
                 TweenService:Create(window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
                     Size = UDim2.new(0, 0, 0, 0),
                     Rotation = 180,
                     BackgroundTransparency = 1
                 }):Play()
-                TweenService:Create(shadow, TweenInfo.new(0.3), { ImageTransparency = 1 }):Play()
+                TweenService:Create(windowBorder, TweenInfo.new(0.3), {
+                    Transparency = 1
+                }):Play()
+                TweenService:Create(shadow, TweenInfo.new(0.3), {
+                    BackgroundTransparency = 1
+                }):Play()
                 
                 task.wait(0.3)
                 screenGui:Destroy()
@@ -1018,22 +1024,21 @@ local function createKeyUI(callback, executorInfo)
     end)
 
     -- ============================================
-    -- ENTRY ANIMATION - Smooth bounce effect
+    -- ENTRY ANIMATION - Clean bounce (NO BACKDROP)
     -- ============================================
     screenGui.Parent = playerGui
 
-    -- Start invisible
+    -- Start state
     window.BackgroundTransparency = 1
     windowBorder.Transparency = 1
-    shadow.ImageTransparency = 1
+    shadow.BackgroundTransparency = 1
     titleBar.BackgroundTransparency = 1
     
-    -- Hide all traffic buttons
     for _, dot in ipairs(trafficButtons) do
         dot.BackgroundTransparency = 1
     end
 
-    -- Window bounce in from small
+    -- Window bounce in
     window.Size = UDim2.new(0, windowWidth * 0.7, 0, windowHeight * 0.7)
     window.Position = UDim2.new(0.5, -(windowWidth * 0.7) / 2, 0.5, -(windowHeight * 0.7) / 2)
     window.Rotation = -5
@@ -1046,17 +1051,15 @@ local function createKeyUI(callback, executorInfo)
     }):Play()
 
     TweenService:Create(windowBorder, TweenInfo.new(0.4), { Transparency = 0 }):Play()
-    TweenService:Create(shadow, TweenInfo.new(0.4), { ImageTransparency = 0.6 }):Play()
+    TweenService:Create(shadow, TweenInfo.new(0.4), { BackgroundTransparency = 0.7 }):Play()
 
     task.wait(0.2)
 
-    -- Title bar fade in
     TweenService:Create(titleBar, TweenInfo.new(0.25), { BackgroundTransparency = 0 }):Play()
 
-    -- Traffic lights pop in
     for i, dot in ipairs(trafficButtons) do
         task.wait(0.05)
-        dot.Size = UDim2.new(0, 8, 0, 8)  -- Start small
+        dot.Size = UDim2.new(0, 8, 0, 8)
         TweenService:Create(dot, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
             Size = UDim2.new(0, 12, 0, 12),
             BackgroundTransparency = 0
