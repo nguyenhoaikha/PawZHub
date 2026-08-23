@@ -103,11 +103,79 @@ end
 
 local function notify(title, text, duration)
     pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = duration or 5
-        })
+        local Players = game:GetService("Players")
+        local TweenService = game:GetService("TweenService")
+        local player = Players.LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+        
+        -- Create custom notification
+        local notif = Instance.new("ScreenGui")
+        notif.Name = "PawZHubNotification"
+        notif.ResetOnSpawn = false
+        notif.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 300, 0, 80)
+        frame.Position = UDim2.new(1, 20, 0, 20)  -- Start off-screen right
+        frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        frame.BorderSizePixel = 0
+        frame.Parent = notif
+        
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+        
+        local border = Instance.new("UIStroke", frame)
+        border.Color = Color3.fromRGB(0, 122, 255)
+        border.Thickness = 2
+        
+        -- Icon (🐾 emoji)
+        local icon = Instance.new("TextLabel")
+        icon.Size = UDim2.new(0, 40, 0, 40)
+        icon.Position = UDim2.new(0, 15, 0.5, -20)
+        icon.BackgroundTransparency = 1
+        icon.Text = "🐾"
+        icon.TextSize = 32
+        icon.Parent = frame
+        
+        -- Title
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Size = UDim2.new(1, -70, 0, 25)
+        titleLabel.Position = UDim2.new(0, 60, 0, 10)
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Text = title
+        titleLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+        titleLabel.TextSize = 14
+        titleLabel.Font = Enum.Font.GothamBold
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.Parent = frame
+        
+        -- Text
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, -70, 0, 35)
+        textLabel.Position = UDim2.new(0, 60, 0, 35)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = text
+        textLabel.TextColor3 = Color3.fromRGB(180, 185, 195)
+        textLabel.TextSize = 12
+        textLabel.Font = Enum.Font.Gotham
+        textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        textLabel.TextWrapped = true
+        textLabel.Parent = frame
+        
+        notif.Parent = playerGui
+        
+        -- Slide in animation
+        TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Position = UDim2.new(1, -320, 0, 20)
+        }):Play()
+        
+        -- Auto dismiss
+        task.delay(duration or 5, function()
+            TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Position = UDim2.new(1, 20, 0, 20)
+            }):Play()
+            task.wait(0.3)
+            notif:Destroy()
+        end)
     end)
 end
 

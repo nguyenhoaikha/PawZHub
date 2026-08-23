@@ -505,15 +505,19 @@ local function createKeyUI(callback, executorInfo)
         if i == 2 then
             local isMinimized = false
             local normalSize = UDim2.new(0, windowWidth, 0, windowHeight)
-            local minimizedSize = UDim2.new(0, windowWidth, 0, 44)  -- Chỉ còn titlebar
+            local minimizedSize = UDim2.new(0, windowWidth, 0, 44)
             
             dot.MouseButton1Click:Connect(function()
                 isMinimized = not isMinimized
                 if isMinimized then
+                    -- Hide content
+                    content.Visible = false
                     TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
                         Size = minimizedSize
                     }):Play()
                 else
+                    -- Show content
+                    content.Visible = true
                     TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
                         Size = normalSize
                     }):Play()
