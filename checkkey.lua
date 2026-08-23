@@ -438,18 +438,7 @@ local function createKeyUI(callback, executorInfo)
     windowBorder.Color = Color3.fromRGB(70, 75, 85)
     windowBorder.Thickness = 2
 
-    -- Shadow
-    local shadow = Instance.new("Frame")
-    shadow.Size = UDim2.new(1, 30, 1, 30)
-    shadow.Position = UDim2.new(0, -15, 0, 10)
-    shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.BackgroundTransparency = 0.7
-    shadow.BorderSizePixel = 0
-    shadow.ZIndex = -1
-    shadow.Parent = window
-    
-    local shadowCorner = Instance.new("UICorner", shadow)
-    shadowCorner.CornerRadius = UDim.new(0, 12)
+    -- NO SHADOW - Game nhìn rõ phía sau
 
     -- Title bar
     local titleBar = Instance.new("Frame")
@@ -576,81 +565,51 @@ local function createKeyUI(callback, executorInfo)
     title.TextColor3 = Color3.fromRGB(240, 240, 245)  -- Chữ sáng trên nền tối
     title.TextSize = 14
     title.Font = Enum.Font.GothamMedium
-    title.TextTransparency = 0  -- Show text ngay
+    title.TextTransparency = 0
     title.Parent = titleBar
     
-    -- Right side buttons (Discord, Copy HWID, Info)
-    local rightButtons = Instance.new("Frame")
-    rightButtons.Size = UDim2.new(0, 120, 0, 28)
-    rightButtons.Position = UDim2.new(1, -130, 0, 8)
-    rightButtons.BackgroundTransparency = 1
-    rightButtons.Parent = titleBar
+    -- Discord button (nút duy nhất bên phải)
+    local discordBtn = Instance.new("TextButton")
+    discordBtn.Size = UDim2.new(0, 80, 0, 28)
+    discordBtn.Position = UDim2.new(1, -90, 0, 8)
+    discordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)  -- Discord color
+    discordBtn.BorderSizePixel = 0
+    discordBtn.Text = "Discord"
+    discordBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    discordBtn.TextSize = 12
+    discordBtn.Font = Enum.Font.GothamBold
+    discordBtn.AutoButtonColor = false
+    discordBtn.Parent = titleBar
     
-    local function createIconButton(text, pos, tooltip)
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 32, 0, 28)
-        btn.Position = UDim2.new(0, pos, 0, 0)
-        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-        btn.BorderSizePixel = 0
-        btn.Text = text
-        btn.TextColor3 = Color3.fromRGB(200, 200, 210)
-        btn.TextSize = 14
-        btn.Font = Enum.Font.GothamBold
-        btn.AutoButtonColor = false
-        btn.Parent = rightButtons
-        
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-        
-        -- Hover effect
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.1), {
-                BackgroundColor3 = Color3.fromRGB(60, 60, 70),
-                TextColor3 = Color3.fromRGB(255, 255, 255)
-            }):Play()
-        end)
-        btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.1), {
-                BackgroundColor3 = Color3.fromRGB(40, 40, 45),
-                TextColor3 = Color3.fromRGB(200, 200, 210)
-            }):Play()
-        end)
-        
-        return btn
-    end
+    Instance.new("UICorner", discordBtn).CornerRadius = UDim.new(0, 6)
     
-    -- Discord button
-    local discordBtn = createIconButton("D", 0, "Discord")
+    -- Discord button hover + click
+    discordBtn.MouseEnter:Connect(function()
+        TweenService:Create(discordBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(108, 121, 255),
+            Size = UDim2.new(0, 82, 0, 30)
+        }):Play()
+    end)
+    discordBtn.MouseLeave:Connect(function()
+        TweenService:Create(discordBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(88, 101, 242),
+            Size = UDim2.new(0, 80, 0, 28)
+        }):Play()
+    end)
     discordBtn.MouseButton1Click:Connect(function()
         local discordLink = "https://discord.gg/pawzhub"
         if setclipboard then
             setclipboard(discordLink)
-            discordBtn.Text = "✓"
-            discordBtn.BackgroundColor3 = Color3.fromRGB(40, 205, 65)
-            task.wait(1)
-            discordBtn.Text = "D"
-            discordBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            discordBtn.Text = "✓ Copied"
+            TweenService:Create(discordBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(40, 205, 65)
+            }):Play()
+            task.wait(1.5)
+            discordBtn.Text = "Discord"
+            TweenService:Create(discordBtn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+            }):Play()
         end
-    end)
-    
-    -- Copy HWID button
-    local hwidBtn = createIconButton("H", 38, "Copy HWID")
-    hwidBtn.MouseButton1Click:Connect(function()
-        local hwid = getHWID()
-        if setclipboard then
-            setclipboard(hwid)
-            hwidBtn.Text = "✓"
-            hwidBtn.BackgroundColor3 = Color3.fromRGB(40, 205, 65)
-            task.wait(1)
-            hwidBtn.Text = "H"
-            hwidBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-        end
-    end)
-    
-    -- Info/Help button
-    local infoBtn = createIconButton("?", 76, "Info")
-    infoBtn.MouseButton1Click:Connect(function()
-        status.Text = "HWID: " .. getHWID():sub(1, 16) .. "..."
-        status.TextColor3 = Color3.fromRGB(0, 122, 255)
     end)
 
     -- Content
@@ -946,9 +905,6 @@ local function createKeyUI(callback, executorInfo)
                 TweenService:Create(windowBorder, TweenInfo.new(0.3), {
                     Transparency = 1
                 }):Play()
-                TweenService:Create(shadow, TweenInfo.new(0.3), {
-                    BackgroundTransparency = 1
-                }):Play()
                 
                 task.wait(0.3)
                 screenGui:Destroy()
@@ -1031,7 +987,6 @@ local function createKeyUI(callback, executorInfo)
     -- Start state
     window.BackgroundTransparency = 1
     windowBorder.Transparency = 1
-    shadow.BackgroundTransparency = 1
     titleBar.BackgroundTransparency = 1
     
     for _, dot in ipairs(trafficButtons) do
@@ -1051,7 +1006,6 @@ local function createKeyUI(callback, executorInfo)
     }):Play()
 
     TweenService:Create(windowBorder, TweenInfo.new(0.4), { Transparency = 0 }):Play()
-    TweenService:Create(shadow, TweenInfo.new(0.4), { BackgroundTransparency = 0.7 }):Play()
 
     task.wait(0.2)
 
