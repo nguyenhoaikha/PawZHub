@@ -1,41 +1,353 @@
--- PawZHub Key Authentication System
--- This file handles key verification and creates session tokens
+-- PawZHub Advanced Key Authentication System v2.0
+-- This file handles key verification, session management, and security
 
 local CheckKeySystem = {}
 
--- Configuration
+-- ============================================
+-- CONFIGURATION
+-- ============================================
+
 local CONFIG = {
-    KEY_CHECK_URL = "https://your-api-endpoint.com/verify", -- Replace with your API endpoint
-    WEBHOOK_URL = "https://discord.com/api/webhooks/YOUR_WEBHOOK", -- Optional: for logging
-    KEY_LENGTH = 20, -- Expected key length
-    SESSION_DURATION = 3600, -- Session valid for 1 hour (in seconds)
+    -- API Endpoints
+    KEY_CHECK_URL = "https://your-api-endpoint.com/verify",
+    WEBHOOK_URL = "https://discord.com/api/webhooks/YOUR_WEBHOOK",
+    BLACKLIST_URL = "https://your-api-endpoint.com/blacklist",
+    VERSION_CHECK_URL = "https://your-api-endpoint.com/version",
+    
+    -- Security Settings
+    SESSION_DURATION = 3600,           -- 1 hour in seconds
+    MAX_RETRY_ATTEMPTS = 3,            -- Max failed attempts before lockout
+    LOCKOUT_DURATION = 300,            -- 5 minutes lockout
+    RATE_LIMIT_COOLDOWN = 2,           -- Seconds between requests
+    ENABLE_HWID_BINDING = true,        -- Bind keys to HWID
+    ENABLE_IP_LOGGING = false,         -- Log IP addresses
+    
+    -- Key Settings
+    KEY_FORMAT_REGEX = "^[A-Z0-9]{4}%-[A-Z0-9]{4}%-[A-Z0-9]{4}%-[A-Z0-9]{4}$",
+    ALLOW_OFFLINE_MODE = true,         -- Allow fallback keys when offline
+    CACHE_DURATION = 600,              -- Cache valid keys for 10 minutes
+    
+    -- Version Control
+    CURRENT_VERSION = "2.0.0",
+    REQUIRE_LATEST_VERSION = false,
+    
+    -- Debug
+    DEBUG_MODE = false,
 }
 
--- Generate unique session token
+-- ============================================
+-- STATE MANAGEMENT
+-- ============================================
+
+local State = {
+    failedAttempts = 0,
+    lockedUntil = 0,
+    lastRequestTime = 0,
+    keyCache = {},
+    blacklistedUsers = {},
+    analytics = {
+        keysChecked = 0,
+        successfulLogins = 0,
+        failedLogins = 0,
+        startTime = os.time(),
+    }
+}
+
+-- ============================================
+-- UTILITY FUNCTIONS
+-- ============================================
+
+-- Generate cryptographically random token
 local function generateToken()
-    local chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    local token = ""
-    for i = 1, 32 do
-        local rand = math.random(1, #chars)
-        token = token .. chars:sub(rand, rand)
-    end
-    return token
+    local HttpService = game:GetService("HttpService")
+    -- Use Roblox's GUID for better randomness
+    local guid = HttpService:GenerateGUID(false)
+    return guid:gsub("-", ""):upper()
 end
 
--- Create session data
-local function createSession(key)
-    local token = generateToken()
-    local sessionData = {
-        token = token,
-        key = key,
-        timestamp = os.time(),
-        gameId = game.PlaceId,
-        userId = game:GetService("Players").LocalPlayer.UserId,
-        username = game:GetService("Players").LocalPlayer.Name
+-- Get Hardware ID (unique per device)
+local function getHWID()
+    local HttpService = game:GetService("HttpService")
+    local UserInputService = game:GetService("UserInputService")
+    
+    local hwid = ""
+    -- Combine multiple factors for HWID
+    pcall(function()
+        local factors = {
+            game:GetService("RbxAnalyticsService"):GetClientId(),
+            tostring(UserInputService:GetGamepadIds()[1] or "no-gamepad"),
+            tostring(game.PlaceId),
+        }
+        hwid = HttpService:JSONEncode(factors)
+    end)
+    
+    -- Hash the HWID
+    return HttpService:GenerateGUID(false):gsub("-", ""):sub(1, 16):upper()
+end
+
+-- Simple encryption for local storage
+local function encrypt(text, key)
+    local result = ""
+    for i = 1, #text do
+        local char = text:sub(i, i)
+        local keyChar = key:sub((i - 1) % #key + 1, (i - 1) % #key + 1)
+        result = result .. string.char(bit32.bxor(string.byte(char), string.byte(keyChar)))
+    end
+    return game:GetService("HttpService"):GenerateGUID(false):sub(1, 8) .. result
+end
+
+local function decrypt(encrypted, key)
+    if #encrypted < 8 then return nil end
+    local text = encrypted:sub(9)
+    local result = ""
+    for i = 1, #text do
+        local char = text:sub(i, i)
+        local keyChar = key:sub((i - 1) % #key + 1, (i - 1) % #key + 1)
+        result = result .. string.char(bit32.bxor(string.byte(char), string.byte(keyChar)))
+    end
+    return result
+end
+
+-- Validate key format
+local function isValidKeyFormat(key)
+    if not key or type(key) ~= "string" then
+        return false
+    end
+    
+    -- Check against regex pattern
+    return key:match(CONFIG.KEY_FORMAT_REGEX) ~= nil
+end
+
+-- Rate limiting check
+local function checkRateLimit()
+    local currentTime = os.time()
+    local timeSinceLastRequest = currentTime - State.lastRequestTime
+    
+    if timeSinceLastRequest < CONFIG.RATE_LIMIT_COOLDOWN then
+        return false, string.format("Please wait %d seconds", CONFIG.RATE_LIMIT_COOLDOWN - timeSinceLastRequest)
+    end
+    
+    State.lastRequestTime = currentTime
+    return true
+end
+
+-- Check if user is locked out
+local function checkLockout()
+    if State.lockedUntil > os.time() then
+        local remaining = State.lockedUntil - os.time()
+        return false, string.format("Too many failed attempts. Locked for %d seconds", remaining)
+    end
+    
+    -- Reset if lockout expired
+    if State.lockedUntil > 0 and State.lockedUntil <= os.time() then
+        State.failedAttempts = 0
+        State.lockedUntil = 0
+    end
+    
+    return true
+end
+
+-- Log to debug
+local function debugLog(...)
+    if CONFIG.DEBUG_MODE then
+        print("[PawZHub Debug]", ...)
+    end
+end
+
+-- ============================================
+-- CACHE SYSTEM
+-- ============================================
+
+local function getCachedKey(key)
+    local cached = State.keyCache[key]
+    if not cached then return nil end
+    
+    -- Check if cache is still valid
+    if os.time() - cached.timestamp > CONFIG.CACHE_DURATION then
+        State.keyCache[key] = nil
+        return nil
+    end
+    
+    debugLog("Using cached key:", key)
+    return cached.data
+end
+
+local function cacheKey(key, data)
+    State.keyCache[key] = {
+        data = data,
+        timestamp = os.time()
+    }
+end
+
+-- ============================================
+-- BLACKLIST SYSTEM
+-- ============================================
+
+local function fetchBlacklist()
+    local HttpService = game:GetService("HttpService")
+    pcall(function()
+        local response = HttpService:GetAsync(CONFIG.BLACKLIST_URL, true)
+        local data = HttpService:JSONDecode(response)
+        State.blacklistedUsers = data.users or {}
+    end)
+end
+
+local function isBlacklisted(userId)
+    for _, id in ipairs(State.blacklistedUsers) do
+        if tostring(id) == tostring(userId) then
+            return true
+        end
+    end
+    return false
+end
+
+-- ============================================
+-- WEBHOOK LOGGING
+-- ============================================
+
+local function sendWebhook(data)
+    if not CONFIG.WEBHOOK_URL or CONFIG.WEBHOOK_URL == "https://discord.com/api/webhooks/YOUR_WEBHOOK" then
+        return
+    end
+    
+    local HttpService = game:GetService("HttpService")
+    local player = game:GetService("Players").LocalPlayer
+    
+    local embed = {
+        title = data.title or "PawZHub Event",
+        description = data.description or "No description",
+        color = data.color or 3447003,
+        fields = {
+            {name = "User", value = player.Name, inline = true},
+            {name = "User ID", value = tostring(player.UserId), inline = true},
+            {name = "Game", value = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name, inline = false},
+            {name = "Place ID", value = tostring(game.PlaceId), inline = true},
+            {name = "Time", value = os.date("%Y-%m-%d %H:%M:%S"), inline = true},
+        },
+        footer = {
+            text = "PawZHub v" .. CONFIG.CURRENT_VERSION
+        },
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%S")
     }
     
-    -- Store in global scope (accessible by other scripts)
+    -- Add custom fields
+    if data.fields then
+        for _, field in ipairs(data.fields) do
+            table.insert(embed.fields, field)
+        end
+    end
+    
+    local payload = HttpService:JSONEncode({
+        embeds = {embed}
+    })
+    
+    pcall(function()
+        HttpService:PostAsync(
+            CONFIG.WEBHOOK_URL,
+            payload,
+            Enum.HttpContentType.ApplicationJson
+        )
+    end)
+end
+
+-- ============================================
+-- VERSION CONTROL
+-- ============================================
+
+local function checkVersion()
+    if not CONFIG.VERSION_CHECK_URL then return true end
+    
+    local HttpService = game:GetService("HttpService")
+    local success, response = pcall(function()
+        return HttpService:GetAsync(CONFIG.VERSION_CHECK_URL, true)
+    end)
+    
+    if success then
+        local data = HttpService:JSONDecode(response)
+        local latestVersion = data.version
+        
+        if latestVersion ~= CONFIG.CURRENT_VERSION then
+            warn("New version available:", latestVersion, "Current:", CONFIG.CURRENT_VERSION)
+            
+            if CONFIG.REQUIRE_LATEST_VERSION then
+                return false, "Please update to the latest version: " .. latestVersion
+            end
+            
+            -- Send notification
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Update Available",
+                Text = "New version " .. latestVersion .. " is available!",
+                Duration = 10
+            })
+        end
+    end
+    
+    return true
+end
+
+-- ============================================
+-- SESSION MANAGEMENT
+-- ============================================
+
+-- Enhanced session creation with security features
+local function createSession(key, keyData)
+    local token = generateToken()
+    local hwid = getHWID()
+    
+    local sessionData = {
+        -- Core data
+        token = token,
+        key = key,
+        hwid = hwid,
+        timestamp = os.time(),
+        expiresAt = os.time() + CONFIG.SESSION_DURATION,
+        
+        -- Game info
+        gameId = game.PlaceId,
+        gameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name,
+        
+        -- User info
+        userId = game:GetService("Players").LocalPlayer.UserId,
+        username = game:GetService("Players").LocalPlayer.Name,
+        displayName = game:GetService("Players").LocalPlayer.DisplayName,
+        accountAge = game:GetService("Players").LocalPlayer.AccountAge,
+        
+        -- Key info (from API response)
+        keyTier = keyData and keyData.tier or "free",
+        keyExpiry = keyData and keyData.expiry or nil,
+        keyFeatures = keyData and keyData.features or {},
+        
+        -- Security
+        sessionId = generateToken():sub(1, 16),
+        createdAt = os.date("%Y-%m-%d %H:%M:%S"),
+        ipHash = "", -- Populated if IP logging enabled
+        
+        -- Statistics
+        loginCount = 1,
+        lastActivity = os.time(),
+    }
+    
+    -- Store in multiple locations for redundancy
     _G.PawZHubSession = sessionData
+    _G.PawZHub_Token = token
+    _G.PawZHub_Authenticated = true
+    
+    -- Log analytics
+    State.analytics.successfulLogins = State.analytics.successfulLogins + 1
+    
+    -- Send webhook notification
+    sendWebhook({
+        title = "✅ Successful Login",
+        description = "User authenticated successfully",
+        color = 3066993,
+        fields = {
+            {name = "Key Tier", value = sessionData.keyTier, inline = true},
+            {name = "HWID", value = hwid:sub(1, 8) .. "...", inline = true},
+            {name = "Session ID", value = sessionData.sessionId, inline = true},
+        }
+    })
+    
+    debugLog("Session created:", sessionData.sessionId)
     
     return sessionData
 end
@@ -50,9 +362,15 @@ function CheckKeySystem.verifySession()
     local currentTime = os.time()
     
     -- Check if session expired
-    if (currentTime - session.timestamp) > CONFIG.SESSION_DURATION then
-        _G.PawZHubSession = nil
+    if currentTime > session.expiresAt then
+        CheckKeySystem.destroySession()
         return false, "Session expired"
+    end
+    
+    -- Check if key expired (if has expiry)
+    if session.keyExpiry and currentTime > session.keyExpiry then
+        CheckKeySystem.destroySession()
+        return false, "Key expired"
     end
     
     -- Check if game matches
@@ -60,52 +378,261 @@ function CheckKeySystem.verifySession()
         return false, "Session for different game"
     end
     
+    -- Check HWID if binding enabled
+    if CONFIG.ENABLE_HWID_BINDING then
+        local currentHWID = getHWID()
+        if session.hwid ~= currentHWID then
+            CheckKeySystem.destroySession()
+            sendWebhook({
+                title = "⚠️ HWID Mismatch",
+                description = "Session HWID doesn't match current device",
+                color = 15158332,
+            })
+            return false, "HWID mismatch - session invalidated"
+        end
+    end
+    
+    -- Update last activity
+    session.lastActivity = currentTime
+    
     return true, session
 end
 
--- Verify key with remote server
+-- Destroy session
+function CheckKeySystem.destroySession()
+    _G.PawZHubSession = nil
+    _G.PawZHub_Token = nil
+    _G.PawZHub_Authenticated = nil
+    debugLog("Session destroyed")
+end
+
+-- ============================================
+-- KEY VERIFICATION
+-- ============================================
+
+-- Verify key with remote server (enhanced)
 local function verifyKeyRemote(key)
+    -- Rate limit check
+    local canProceed, rateLimitMsg = checkRateLimit()
+    if not canProceed then
+        return false, rateLimitMsg
+    end
+    
+    -- Check cache first
+    local cached = getCachedKey(key)
+    if cached then
+        return true, "Valid (cached)", cached
+    end
+    
     local HttpService = game:GetService("HttpService")
+    local player = game:GetService("Players").LocalPlayer
+    
+    local requestData = {
+        key = key,
+        hwid = getHWID(),
+        userId = player.UserId,
+        username = player.Name,
+        displayName = player.DisplayName,
+        gameId = game.PlaceId,
+        version = CONFIG.CURRENT_VERSION,
+        timestamp = os.time(),
+    }
+    
     local success, response = pcall(function()
         return HttpService:PostAsync(
             CONFIG.KEY_CHECK_URL,
-            HttpService:JSONEncode({
-                key = key,
-                userId = game:GetService("Players").LocalPlayer.UserId,
-                username = game:GetService("Players").LocalPlayer.Name,
-                gameId = game.PlaceId
-            }),
+            HttpService:JSONEncode(requestData),
             Enum.HttpContentType.ApplicationJson,
-            false
+            false,
+            {
+                ["Content-Type"] = "application/json",
+                ["User-Agent"] = "PawZHub/" .. CONFIG.CURRENT_VERSION,
+            }
         )
     end)
     
+    State.analytics.keysChecked = State.analytics.keysChecked + 1
+    
     if success then
         local data = HttpService:JSONDecode(response)
-        return data.valid == true, data.message or "Unknown error"
+        
+        if data.valid == true then
+            -- Cache the key
+            cacheKey(key, data)
+            
+            return true, data.message or "Valid key", data
+        else
+            return false, data.message or "Invalid key"
+        end
     else
-        -- Fallback: If HTTP fails, check against hardcoded keys
-        warn("Key verification server unavailable, using fallback")
-        return CheckKeySystem.verifyKeyFallback(key)
+        warn("Key verification failed:", response)
+        
+        -- Fallback to offline mode if enabled
+        if CONFIG.ALLOW_OFFLINE_MODE then
+            warn("Attempting offline verification...")
+            return CheckKeySystem.verifyKeyFallback(key)
+        end
+        
+        return false, "Server unreachable"
     end
 end
 
--- Fallback key verification (hardcoded keys)
+-- Enhanced fallback verification
 function CheckKeySystem.verifyKeyFallback(key)
     local validKeys = {
-        "PAWZ-FREE-2024-DEMO1",
-        "PAWZ-PREMIUM-KEY123",
-        -- Add more keys here
+        -- Format: ["KEY"] = {tier, expiry_timestamp, features}
+        ["PAWZ-FREE-2024-DEMO1"] = {
+            tier = "free",
+            expiry = nil, -- No expiry
+            features = {"basic"}
+        },
+        ["PAWZ-PREM-2024-TEST"] = {
+            tier = "premium",
+            expiry = os.time() + (30 * 24 * 3600), -- 30 days from now
+            features = {"basic", "advanced", "priority"}
+        },
+        ["PAWZ-LIFE-2024-VIP1"] = {
+            tier = "lifetime",
+            expiry = nil,
+            features = {"basic", "advanced", "premium", "priority", "exclusive"}
+        },
     }
     
-    for _, validKey in ipairs(validKeys) do
-        if key == validKey then
-            return true, "Key valid (fallback mode)"
+    local keyData = validKeys[key]
+    if keyData then
+        -- Check if key is expired
+        if keyData.expiry and os.time() > keyData.expiry then
+            return false, "Key expired", nil
         end
+        
+        return true, "Valid key (offline mode)", keyData
     end
     
     return false, "Invalid key"
 end
+
+-- ============================================
+-- MAIN VERIFICATION FLOW
+-- ============================================
+
+local function performKeyVerification(key)
+    -- Pre-checks
+    local lockoutOk, lockoutMsg = checkLockout()
+    if not lockoutOk then
+        return false, lockoutMsg
+    end
+    
+    -- Format validation
+    if not isValidKeyFormat(key) then
+        State.failedAttempts = State.failedAttempts + 1
+        return false, "Invalid key format"
+    end
+    
+    -- Blacklist check
+    local player = game:GetService("Players").LocalPlayer
+    if isBlacklisted(player.UserId) then
+        sendWebhook({
+            title = "🚫 Blacklisted User Attempt",
+            description = "Blacklisted user tried to authenticate",
+            color = 10038562,
+        })
+        return false, "Access denied"
+    end
+    
+    -- Version check
+    local versionOk, versionMsg = checkVersion()
+    if not versionOk then
+        return false, versionMsg
+    end
+    
+    -- Perform verification
+    local valid, message, keyData = verifyKeyRemote(key)
+    
+    if valid then
+        -- Reset failed attempts
+        State.failedAttempts = 0
+        State.lockedUntil = 0
+        
+        return true, message, keyData
+    else
+        -- Increment failed attempts
+        State.failedAttempts = State.failedAttempts + 1
+        State.analytics.failedLogins = State.analytics.failedLogins + 1
+        
+        -- Check if should lockout
+        if State.failedAttempts >= CONFIG.MAX_RETRY_ATTEMPTS then
+            State.lockedUntil = os.time() + CONFIG.LOCKOUT_DURATION
+            
+            sendWebhook({
+                title = "⚠️ Account Locked",
+                description = string.format("Too many failed attempts (%d)", State.failedAttempts),
+                color = 15105570,
+            })
+            
+            return false, string.format("Too many failed attempts. Locked for %d seconds", CONFIG.LOCKOUT_DURATION)
+        end
+        
+        local remainingAttempts = CONFIG.MAX_RETRY_ATTEMPTS - State.failedAttempts
+        return false, string.format("%s (%d attempts remaining)", message, remainingAttempts)
+    end
+end
+
+-- ============================================
+-- PUBLIC API
+-- ============================================
+
+-- Main function to show key system
+function CheckKeySystem.show(callback)
+    -- Initialize
+    fetchBlacklist()
+    
+    -- ALWAYS show key UI for testing (no session cache)
+    createKeyUI(callback)
+end
+
+-- Get analytics data
+function CheckKeySystem.getAnalytics()
+    return {
+        uptime = os.time() - State.analytics.startTime,
+        keysChecked = State.analytics.keysChecked,
+        successRate = State.analytics.keysChecked > 0 
+            and (State.analytics.successfulLogins / State.analytics.keysChecked * 100) 
+            or 0,
+        failedLogins = State.analytics.failedLogins,
+        currentCacheSize = #State.keyCache,
+    }
+end
+
+-- Check if user has feature access
+function CheckKeySystem.hasFeature(featureName)
+    local valid, session = CheckKeySystem.verifySession()
+    if not valid then return false end
+    
+    for _, feature in ipairs(session.keyFeatures) do
+        if feature == featureName then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Refresh session (extend expiry)
+function CheckKeySystem.refreshSession()
+    if not _G.PawZHubSession then
+        return false, "No active session"
+    end
+    
+    local session = _G.PawZHubSession
+    session.expiresAt = os.time() + CONFIG.SESSION_DURATION
+    session.lastActivity = os.time()
+    
+    debugLog("Session refreshed")
+    return true
+end
+
+-- Export for use in other scripts
+return CheckKeySystem
 
 -- Create UI for key input - macOS style with blur backdrop
 local function createKeyUI(callback)
