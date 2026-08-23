@@ -166,6 +166,62 @@ end
 -- KEY VERIFICATION
 -- ============================================
 
+-- Offline/Test keys (fallback when API is down)
+local function verifyKeyOffline(key)
+    local testKeys = {
+        -- Free keys (24h)
+        ["PAWZ-FREE-2024-DEMO1"] = {
+            type = "free",
+            tier = "free",
+            expiry = nil,
+            features = {"basic"}
+        },
+        ["PAWZ-FREE-TEST-KEY1"] = {
+            type = "free",
+            tier = "free",
+            expiry = nil,
+            features = {"basic"}
+        },
+        
+        -- Premium keys (30d)
+        ["PAWZ-PREM-2024-TEST"] = {
+            type = "free",
+            tier = "premium",
+            expiry = os.time() + (30 * 24 * 3600),
+            features = {"basic", "advanced"}
+        },
+        
+        -- Lifetime keys
+        ["PAWZ-LIFE-2024-VIP1"] = {
+            type = "free",
+            tier = "lifetime",
+            expiry = nil,
+            features = {"basic", "advanced", "premium", "exclusive"}
+        },
+        
+        -- Lifetime key format (24 hex chars) - example
+        ["f03d3260914a9475faf29b12"] = {
+            type = "lifetime",
+            tier = "lifetime",
+            expiry = nil,
+            features = {"basic", "advanced", "premium", "exclusive"},
+            hwidResetAvailable = true
+        }
+    }
+    
+    local keyData = testKeys[key]
+    if keyData then
+        -- Check expiry
+        if keyData.expiry and os.time() > keyData.expiry then
+            return false, "Key expired", nil
+        end
+        
+        return true, "Valid (offline mode)", keyData
+    end
+    
+    return false, "Invalid key"
+end
+
 local function verifyKeyRemote(key)
     local canProceed, msg = checkRateLimit()
     if not canProceed then return false, msg end
@@ -366,6 +422,12 @@ local function createKeyUI(callback, executorInfo)
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
 
+    -- Destroy old UI if exists
+    local oldGui = playerGui:FindFirstChild("PawZHubKeySystem")
+    if oldGui then
+        oldGui:Destroy()
+    end
+
     local isMobile = executorInfo and (executorInfo.platform == "Mobile" or executorInfo.platform == "iOS" or executorInfo.platform == "Android")
     local windowWidth = isMobile and 340 or 420
     local windowHeight = isMobile and 320 or 280
@@ -388,14 +450,14 @@ local function createKeyUI(callback, executorInfo)
     local window = Instance.new("Frame")
     window.Size = UDim2.new(0, windowWidth, 0, windowHeight)
     window.Position = UDim2.new(0.5, -windowWidth / 2, 0.5, -windowHeight / 2)
-    window.BackgroundColor3 = Color3.fromRGB(240, 242, 247)
+    window.BackgroundColor3 = Color3.fromRGB(30, 30, 35)  -- Đổi từ trắng sang đen
     window.BorderSizePixel = 0
     window.Parent = screenGui
 
     Instance.new("UICorner", window).CornerRadius = UDim.new(0, 12)
 
     local windowBorder = Instance.new("UIStroke", window)
-    windowBorder.Color = Color3.fromRGB(200, 205, 215)
+    windowBorder.Color = Color3.fromRGB(50, 50, 55)  -- Border tối
     windowBorder.Thickness = 1
     windowBorder.Transparency = 0.5
 
@@ -415,7 +477,7 @@ local function createKeyUI(callback, executorInfo)
     -- Title bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 44)
-    titleBar.BackgroundColor3 = Color3.fromRGB(250, 251, 253)
+    titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)  -- Title bar tối
     titleBar.BorderSizePixel = 0
     titleBar.Parent = window
 
@@ -425,11 +487,11 @@ local function createKeyUI(callback, executorInfo)
     local titleBarCover = Instance.new("Frame")
     titleBarCover.Size = UDim2.new(1, 0, 0, 12)
     titleBarCover.Position = UDim2.new(0, 0, 1, -12)
-    titleBarCover.BackgroundColor3 = Color3.fromRGB(250, 251, 253)
+    titleBarCover.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     titleBarCover.BorderSizePixel = 0
     titleBarCover.Parent = titleBar
 
-    -- Traffic lights
+    -- Traffic lights (macOS style với chức năng)
     local controls = Instance.new("Frame")
     controls.Size = UDim2.new(0, 60, 0, 12)
     controls.Position = UDim2.new(0, 12, 0, 16)
@@ -437,19 +499,93 @@ local function createKeyUI(callback, executorInfo)
     controls.Parent = titleBar
 
     local trafficColors = {
-        Color3.fromRGB(255, 95, 87),
-        Color3.fromRGB(255, 189, 46),
-        Color3.fromRGB(40, 205, 65)
+        Color3.fromRGB(255, 95, 87),    -- Red (Close)
+        Color3.fromRGB(255, 189, 46),   -- Yellow (Minimize)
+        Color3.fromRGB(40, 205, 65)     -- Green (Maximize)
     }
+    
+    local trafficButtons = {}
     for i, color in ipairs(trafficColors) do
-        local dot = Instance.new("Frame")
+    local trafficButtons = {}
+    for i, color in ipairs(trafficColors) do
+        local dot = Instance.new("TextButton")  -- Thay đổi từ Frame sang TextButton
         dot.Size = UDim2.new(0, 12, 0, 12)
         dot.Position = UDim2.new(0, (i - 1) * 20, 0, 0)
         dot.BackgroundColor3 = color
         dot.BorderSizePixel = 0
-        dot.BackgroundTransparency = 1
+        dot.BackgroundTransparency = 0  -- Show buttons ngay
+        dot.Text = ""
+        dot.AutoButtonColor = false
         dot.Parent = controls
         Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        
+        trafficButtons[i] = dot
+        
+        -- Red button: Close
+        if i == 1 then
+            dot.MouseButton1Click:Connect(function()
+                TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                    Size = UDim2.new(0, 0, 0, 0)
+                }):Play()
+                TweenService:Create(backdrop, TweenInfo.new(0.2), {
+                    BackgroundTransparency = 1
+                }):Play()
+                task.wait(0.2)
+                screenGui:Destroy()
+            end)
+        end
+        
+        -- Yellow button: Minimize (hide)
+        if i == 2 then
+            dot.MouseButton1Click:Connect(function()
+                local isMinimized = window.Visible
+                if isMinimized then
+                    window.Visible = false
+                    TweenService:Create(backdrop, TweenInfo.new(0.15), {
+                        BackgroundTransparency = 1
+                    }):Play()
+                else
+                    window.Visible = true
+                    TweenService:Create(backdrop, TweenInfo.new(0.15), {
+                        BackgroundTransparency = 0.4
+                    }):Play()
+                end
+            end)
+        end
+        
+        -- Green button: Toggle fullscreen/normal
+        if i == 3 then
+            local isFullscreen = false
+            local normalSize = UDim2.new(0, windowWidth, 0, windowHeight)
+            local normalPos = UDim2.new(0.5, -windowWidth / 2, 0.5, -windowHeight / 2)
+            
+            dot.MouseButton1Click:Connect(function()
+                isFullscreen = not isFullscreen
+                if isFullscreen then
+                    TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                        Size = UDim2.new(0, 600, 0, 400),
+                        Position = UDim2.new(0.5, -300, 0.5, -200)
+                    }):Play()
+                else
+                    TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                        Size = normalSize,
+                        Position = normalPos
+                    }):Play()
+                end
+            end)
+        end
+        
+        -- Hover effect for all buttons
+        dot.MouseEnter:Connect(function()
+            TweenService:Create(dot, TweenInfo.new(0.1), {
+                BackgroundTransparency = 0.3
+            }):Play()
+        end)
+        dot.MouseLeave:Connect(function()
+            TweenService:Create(dot, TweenInfo.new(0.1), {
+                BackgroundTransparency = 0
+            }):Play()
+        end)
     end
 
     -- Title text
@@ -457,11 +593,11 @@ local function createKeyUI(callback, executorInfo)
     title.Size = UDim2.new(1, -160, 0, 44)
     title.Position = UDim2.new(0, 80, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "PawZHub Key System"
-    title.TextColor3 = Color3.fromRGB(30, 30, 35)
+    title.Text = "PawZHub"  -- Đổi từ "PawZHub Key System"
+    title.TextColor3 = Color3.fromRGB(240, 240, 245)  -- Chữ sáng trên nền tối
     title.TextSize = 14
     title.Font = Enum.Font.GothamMedium
-    title.TextTransparency = 1
+    title.TextTransparency = 0  -- Show text ngay
     title.Parent = titleBar
 
     -- Content
@@ -477,26 +613,26 @@ local function createKeyUI(callback, executorInfo)
     typeLabel.Position = UDim2.new(0, 0, 0, 4)
     typeLabel.BackgroundTransparency = 1
     typeLabel.Text = "Key (PAWZ-XXXX-XXXX-XXXX or 24 hex chars)"
-    typeLabel.TextColor3 = Color3.fromRGB(100, 105, 120)
+    typeLabel.TextColor3 = Color3.fromRGB(160, 165, 175)  -- Chữ sáng
     typeLabel.TextSize = 11
     typeLabel.Font = Enum.Font.Gotham
     typeLabel.TextXAlignment = Enum.TextXAlignment.Left
-    typeLabel.TextTransparency = 1
+    typeLabel.TextTransparency = 0  -- Show text
     typeLabel.Parent = content
 
     -- Input container
     local inputContainer = Instance.new("Frame")
     inputContainer.Size = UDim2.new(1, 0, 0, 36)
     inputContainer.Position = UDim2.new(0, 0, 0, 24)
-    inputContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    inputContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 45)  -- Input tối
     inputContainer.BorderSizePixel = 0
-    inputContainer.BackgroundTransparency = 1
+    inputContainer.BackgroundTransparency = 0  -- Show input
     inputContainer.Parent = content
 
     Instance.new("UICorner", inputContainer).CornerRadius = UDim.new(0, 6)
 
     local inputBorder = Instance.new("UIStroke", inputContainer)
-    inputBorder.Color = Color3.fromRGB(200, 205, 215)
+    inputBorder.Color = Color3.fromRGB(60, 65, 75)  -- Border tối
     inputBorder.Thickness = 1
 
     local input = Instance.new("TextBox")
@@ -505,12 +641,12 @@ local function createKeyUI(callback, executorInfo)
     input.BackgroundTransparency = 1
     input.Text = ""
     input.PlaceholderText = "Enter your key..."
-    input.TextColor3 = Color3.fromRGB(30, 30, 35)
-    input.PlaceholderColor3 = Color3.fromRGB(150, 155, 165)
+    input.TextColor3 = Color3.fromRGB(240, 240, 245)  -- Chữ sáng
+    input.PlaceholderColor3 = Color3.fromRGB(120, 125, 135)  -- Placeholder tối
     input.TextSize = 13
     input.Font = Enum.Font.Gotham
     input.ClearTextOnFocus = false
-    input.TextTransparency = 1
+    input.TextTransparency = 0  -- Show text
     input.Parent = inputContainer
 
     -- Focus effects
@@ -536,20 +672,20 @@ local function createKeyUI(callback, executorInfo)
     local getKeyBtn = Instance.new("TextButton")
     getKeyBtn.Size = UDim2.new(0.48, 0, 1, 0)
     getKeyBtn.Position = UDim2.new(0, 0, 0, 0)
-    getKeyBtn.BackgroundColor3 = Color3.fromRGB(245, 246, 248)
+    getKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)  -- Nút tối
     getKeyBtn.BorderSizePixel = 0
     getKeyBtn.Text = "Get Key"
-    getKeyBtn.TextColor3 = Color3.fromRGB(30, 30, 35)
+    getKeyBtn.TextColor3 = Color3.fromRGB(240, 240, 245)  -- Chữ sáng
     getKeyBtn.TextSize = 13
     getKeyBtn.Font = Enum.Font.GothamMedium
     getKeyBtn.AutoButtonColor = false
-    getKeyBtn.BackgroundTransparency = 1
+    getKeyBtn.BackgroundTransparency = 0  -- Show button
     getKeyBtn.Parent = btnContainer
 
     Instance.new("UICorner", getKeyBtn).CornerRadius = UDim.new(0, 6)
 
     local getKeyBorder = Instance.new("UIStroke", getKeyBtn)
-    getKeyBorder.Color = Color3.fromRGB(200, 205, 215)
+    getKeyBorder.Color = Color3.fromRGB(70, 75, 85)  -- Border tối
     getKeyBorder.Thickness = 1
 
     -- Submit button
@@ -563,7 +699,7 @@ local function createKeyUI(callback, executorInfo)
     submitBtn.TextSize = 13
     submitBtn.Font = Enum.Font.GothamBold
     submitBtn.AutoButtonColor = false
-    submitBtn.BackgroundTransparency = 1
+    submitBtn.BackgroundTransparency = 0  -- Show button
     submitBtn.Parent = btnContainer
 
     Instance.new("UICorner", submitBtn).CornerRadius = UDim.new(0, 6)
@@ -593,18 +729,18 @@ local function createKeyUI(callback, executorInfo)
     status.TextColor3 = Color3.fromRGB(255, 59, 48)
     status.TextSize = 11
     status.Font = Enum.Font.Gotham
-    status.TextTransparency = 1
+    status.TextTransparency = 0  -- Show status
     status.Parent = content
 
     -- Hover effects
     getKeyBtn.MouseEnter:Connect(function()
         TweenService:Create(getKeyBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(235, 238, 242)
+            BackgroundColor3 = Color3.fromRGB(60, 60, 65)  -- Hover tối hơn
         }):Play()
     end)
     getKeyBtn.MouseLeave:Connect(function()
         TweenService:Create(getKeyBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(245, 246, 248)
+            BackgroundColor3 = Color3.fromRGB(50, 50, 55)
         }):Play()
     end)
     submitBtn.MouseEnter:Connect(function()
@@ -619,67 +755,26 @@ local function createKeyUI(callback, executorInfo)
     end)
 
     -- ============================================
-    -- GET KEY: 2-link system (Linkvertise)
+    -- GET KEY: Link to https://getpawzhub.vercel.app/getkey
     -- ============================================
     local getKeyEventConnection
-    local currentStep = 1
-    local userId = player.UserId
-
-    local links = {
-        {
-            name = "Link 1",
-            url = string.format("https://rekonise.com/YOUR_CAMPAIGN/%s", userId),
-        },
-        {
-            name = "Link 2",
-            url = string.format("https://work.ink/YOUR_LINK/%s", userId),
-        },
-    }
-
+    
     getKeyEventConnection = getKeyBtn.MouseButton1Click:Connect(function()
-        if currentStep <= #links then
-            local link = links[currentStep]
-            setclipboard(link.url)
-
-            getKeyBtn.Text = string.format("Step %d/%d - Copied!", currentStep, #links)
-            TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
-                BackgroundColor3 = Color3.fromRGB(52, 199, 89)
-            }):Play()
-            TweenService:Create(getKeyBorder, TweenInfo.new(0.15), {
-                Color = Color3.fromRGB(52, 199, 89)
-            }):Play()
-
-            status.Text = "Link " .. currentStep .. "/" .. #links .. " copied! Complete tasks."
-            status.TextColor3 = Color3.fromRGB(52, 199, 89)
-            TweenService:Create(status, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
-
-            currentStep = currentStep + 1
-
+        local getkeyUrl = "https://getpawzhub.vercel.app/getkey"
+        
+        -- Copy link to clipboard
+        if setclipboard then
+            setclipboard(getkeyUrl)
+            getKeyBtn.Text = "Link Copied!"
+            status.Text = "Get key link copied to clipboard!"
+            status.TextColor3 = Color3.fromRGB(40, 205, 65)  -- Green
+            
             task.wait(2)
-            if currentStep <= #links then
-                getKeyBtn.Text = string.format("Step %d/%d", currentStep, #links)
-            else
-                getKeyBtn.Text = "Links Done!"
-                TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
-                    BackgroundColor3 = Color3.fromRGB(0, 122, 255)
-                }):Play()
-                TweenService:Create(getKeyBorder, TweenInfo.new(0.15), {
-                    Color = Color3.fromRGB(0, 122, 255)
-                }):Play()
-                status.Text = "Get key from website, then paste and submit"
-                status.TextColor3 = Color3.fromRGB(0, 122, 255)
-            end
+            getKeyBtn.Text = "Get Key"
+            status.Text = ""
         else
-            -- All links done, open website
-            local keyUrl = CONFIG.API_URL .. "/api/getkey?user=" .. userId
-            setclipboard(keyUrl)
-            getKeyBtn.Text = "URL Copied!"
-            TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
-                BackgroundColor3 = Color3.fromRGB(52, 199, 89)
-            }):Play()
-            status.Text = "Key URL copied. Paste your key below."
-            status.TextColor3 = Color3.fromRGB(52, 199, 89)
-            TweenService:Create(status, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
+            status.Text = "Link: " .. getkeyUrl
+            status.TextColor3 = Color3.fromRGB(0, 122, 255)
         end
     end)
 
@@ -691,7 +786,6 @@ local function createKeyUI(callback, executorInfo)
         if not key or #key ~= 24 then
             status.Text = "Enter your 24-char lifetime key first"
             status.TextColor3 = Color3.fromRGB(255, 149, 0)
-            TweenService:Create(status, TweenInfo.new(0.15), { TextTransparency = 0 }):Play()
             return
         end
 
@@ -857,14 +951,12 @@ local function createKeyUI(callback, executorInfo)
     -- Title bar
     TweenService:Create(titleBar, TweenInfo.new(0.25), { BackgroundTransparency = 0 }):Play()
 
-    -- Traffic lights
-    for _, dot in ipairs(controls:GetChildren()) do
-        if dot:IsA("Frame") then
-            task.wait(0.04)
-            TweenService:Create(dot, TweenInfo.new(0.2, Enum.EasingStyle.Back), {
-                BackgroundTransparency = 0
-            }):Play()
-        end
+    -- Traffic lights (already visible, just fade in smoothly)
+    for i, dot in ipairs(trafficButtons) do
+        task.wait(0.04)
+        TweenService:Create(dot, TweenInfo.new(0.2, Enum.EasingStyle.Back), {
+            BackgroundTransparency = 0
+        }):Play()
     end
 
     task.wait(0.1)
