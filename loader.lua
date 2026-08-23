@@ -1,219 +1,158 @@
--- PawZHub Main Loader
--- Entry point: loadstring(game:HttpGet("https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main/loader.lua"))()
+-- PawZHub Main Loader v2.1
+-- Entry: loadstring(game:HttpGet("https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main/loader.lua"))()
 
-print("🐾 PawZHub Loader Initializing...")
+print("[PawZHub] Initializing...")
 
--- Configuration
 local GITHUB_REPO = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main"
+
 local SUPPORTED_GAMES = {
-    -- Add your game PlaceIds here
-    -- Format: [PlaceId] = {name = "Game Name", script = "ScriptFileName.lua"}
-    
     [2753915549] = {
         name = "Blox Fruits",
         script = "PawZHubBF.lua",
-        displayName = "🍇 Blox Fruits"
+        displayName = "Blox Fruits"
     },
     [4866604015] = {
-        name = "Gunfight Arena", 
+        name = "Gunfight Arena",
         script = "PawZHubGG.lua",
-        displayName = "🔫 Gunfight Arena"
+        displayName = "Gunfight Arena"
     },
-    -- Example for other games:
-    -- [920587237] = {
-    --     name = "Adopt Me",
-    --     script = "PawZHubAM.lua", 
-    --     displayName = "🐶 Adopt Me"
-    -- },
 }
 
--- Detect current game
 local function detectGame()
-    local currentPlaceId = game.PlaceId
-    
-    if SUPPORTED_GAMES[currentPlaceId] then
-        return SUPPORTED_GAMES[currentPlaceId]
-    end
-    
-    return nil
+    return SUPPORTED_GAMES[game.PlaceId]
 end
 
--- Load checkkey system
+local function detectExecutor()
+    local info = { name = "Unknown", platform = "Unknown" }
+    local UIS = game:GetService("UserInputService")
+
+    pcall(function()
+        if syn or is_syn_env then
+            info.name, info.platform = "Synapse X", "PC"
+        elseif KRNL_LOADED then
+            info.name, info.platform = "KRNL", "PC"
+        elseif identifyexecutor then
+            info.name = select(1, pcall(identifyexecutor)) or "Unknown"
+            info.platform = "PC"
+        elseif APPLETOUCHHOOK_LOADED then
+            info.name, info.platform = "Delta", "iOS"
+        elseif FLUX_LOADED then
+            info.name, info.platform = "Flux", "iOS"
+        elseif Arceus then
+            info.name, info.platform = "Arceus X", "Android"
+        elseif hydrogen then
+            info.name, info.platform = "Hydrogen", "Android"
+        elseif UIS.TouchEnabled and not UIS.KeyboardEnabled then
+            info.name, info.platform = "Mobile", "Mobile"
+        elseif UIS.KeyboardEnabled then
+            info.name, info.platform = "PC Executor", "PC"
+        end
+    end)
+
+    _G.PawZHub_Executor = info
+    return info
+end
+
 local function loadCheckKey()
     local url = GITHUB_REPO .. "/checkkey.lua"
     local success, result = pcall(function()
         return game:HttpGet(url)
     end)
-    
+
     if not success then
-        warn("Failed to load checkkey system: " .. tostring(result))
+        warn("[PawZHub] Failed to load key system:", result)
         return nil
     end
-    
-    local checkKeyFunc = loadstring(result)
-    if not checkKeyFunc then
-        warn("Failed to compile checkkey.lua")
+
+    local func = loadstring(result)
+    if not func then
+        warn("[PawZHub] Failed to compile key system")
         return nil
     end
-    
-    return checkKeyFunc()
+
+    return func()
 end
 
--- Load game-specific script
-local function loadGameScript(gameData, session)
-    print("Loading " .. gameData.name .. " script...")
-    
-    local scriptUrl = GITHUB_REPO .. "/script/" .. gameData.script
-    local success, scriptCode = pcall(function()
-        return game:HttpGet(scriptUrl)
+local function loadGameScript(gameData)
+    print("[PawZHub] Loading", gameData.name, "script...")
+
+    local url = GITHUB_REPO .. "/script/" .. gameData.script
+    local success, code = pcall(function()
+        return game:HttpGet(url)
     end)
-    
+
     if not success then
-        warn("Failed to load game script: " .. tostring(scriptCode))
+        warn("[PawZHub] Failed to load game script:", code)
         game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "PawZHub Error",
+            Title = "PawZHub",
             Text = "Failed to load game script",
             Duration = 5
         })
         return
     end
-    
-    -- Execute the game script
-    local scriptFunc = loadstring(scriptCode)
-    if not scriptFunc then
-        warn("Failed to compile game script")
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "PawZHub Error", 
-            Text = "Script compilation failed",
-            Duration = 5
-        })
+
+    local func = loadstring(code)
+    if not func then
+        warn("[PawZHub] Script compilation failed")
         return
     end
-    
-    print("✓ Executing " .. gameData.name .. " script")
-    scriptFunc()
+
+    print("[PawZHub] Executing", gameData.name, "script")
+    func()
 end
 
--- Notification helper
 local function notify(title, text, duration)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = title,
-        Text = text,
-        Duration = duration or 5
-    })
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration or 5
+        })
+    end)
 end
 
--- Main execution
 local function main()
-    -- Detect executor first
-    local executorName = "Unknown"
-    local executorPlatform = "Unknown"
-    pcall(function()
-        local UserInputService = game:GetService("UserInputService")
-        
-        if syn or is_syn_env then
-            executorName = "Synapse X"
-            executorPlatform = "PC"
-        elseif KRNL_LOADED then
-            executorName = "KRNL"
-            executorPlatform = "PC"
-        elseif identifyexecutor then
-            executorName = identifyexecutor() or "Unknown"
-            executorPlatform = "PC"
-        elseif APPLETOUCHHOOK_LOADED then
-            executorName = "Delta"
-            executorPlatform = "iOS"
-        elseif FLUX_LOADED then
-            executorName = "Flux"
-            executorPlatform = "iOS"
-        elseif Arceus then
-            executorName = "Arceus X"
-            executorPlatform = UserInputService.TouchEnabled and "Android" or "PC"
-        elseif hydrogen then
-            executorName = "Hydrogen"
-            executorPlatform = "Android"
-        elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-            executorName = "Mobile Executor"
-            executorPlatform = "Mobile"
-        elseif UserInputService.KeyboardEnabled then
-            executorName = "PC Executor"
-            executorPlatform = "PC"
-        end
-    end)
-    
-    print("Executor:", executorName, "Platform:", executorPlatform)
-    _G.PawZHub_Executor = {name = executorName, platform = executorPlatform}
-    
-    -- Detect game
+    local executorInfo = detectExecutor()
+    print("[PawZHub] Executor:", executorInfo.name, "| Platform:", executorInfo.platform)
+
     local gameData = detectGame()
-    
+
     if not gameData then
-        notify(
-            "❌ PawZHub",
-            "This game is not supported yet!",
-            8
-        )
-        warn("Game PlaceId " .. game.PlaceId .. " is not supported")
+        notify("PawZHub", "This game is not supported yet!", 8)
+        warn("[PawZHub] PlaceId", game.PlaceId, "not supported")
         return
     end
-    
-    print("Detected game: " .. gameData.name .. " (PlaceId: " .. game.PlaceId .. ")")
-    
-    notify(
-        "🐾 PawZHub",
-        "Loading for " .. gameData.displayName,
-        3
-    )
-    
-    -- Load checkkey system
+
+    print("[PawZHub] Detected:", gameData.name, "(PlaceId:", game.PlaceId, ")")
+    notify("PawZHub", "Loading for " .. gameData.displayName, 3)
+
     local CheckKeySystem = loadCheckKey()
-    
+
     if not CheckKeySystem then
-        notify(
-            "❌ PawZHub Error",
-            "Failed to load authentication system",
-            8
-        )
+        notify("PawZHub", "Failed to load authentication system", 8)
         return
     end
-    
-    print("CheckKey system loaded successfully")
-    
-    -- Show key verification UI
+
+    print("[PawZHub] Key system loaded")
+
     CheckKeySystem.show(function(success, session)
         if success then
-            print("✓ Authentication successful!")
-            print("Session Token: " .. session.token)
-            
-            notify(
-                "✓ Authentication Success",
-                "Loading " .. gameData.displayName .. "...",
-                3
-            )
-            
-            -- Load the game-specific script
+            print("[PawZHub] Auth successful! Key type:", session.keyType)
+            print("[PawZHub] Tier:", session.keyTier, "| Features:", table.concat(session.keyFeatures, ", "))
+
+            notify("PawZHub", "Authenticated! Loading " .. gameData.displayName, 3)
+
             task.wait(0.5)
-            loadGameScript(gameData, session)
-            
+            loadGameScript(gameData)
         else
-            notify(
-                "❌ Authentication Failed",
-                "Please enter a valid key",
-                5
-            )
-            warn("Key verification failed")
+            notify("PawZHub", "Authentication failed", 5)
+            warn("[PawZHub] Key verification failed")
         end
     end)
 end
 
--- Protected execution
 local success, error = pcall(main)
-
 if not success then
-    warn("PawZHub Loader Error: " .. tostring(error))
-    notify(
-        "❌ PawZHub Error",
-        "An error occurred. Check console (F9)",
-        8
-    )
+    warn("[PawZHub] Loader error:", error)
+    notify("PawZHub", "An error occurred. Check console (F9)", 8)
 end

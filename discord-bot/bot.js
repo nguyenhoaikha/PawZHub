@@ -1,9 +1,27 @@
-// PawZHub Discord Bot - License Redemption System
-// Text-based, no icons/embed images
+// ============================================
+// PawZHub Discord Bot v2.1 Pro
+// Slash commands + Buttons + Select Menus + Pagination
+// No emoji - Unicode symbols only
+// ============================================
 
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const {
+    Client,
+    GatewayIntentBits,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    ComponentType,
+    AttachmentBuilder
+} = require('discord.js');
 const mongoose = require('mongoose');
+const fs = require('fs');
 require('dotenv').config();
+
+// ============================================
+// CLIENT
+// ============================================
 
 const client = new Client({
     intents: [
@@ -15,81 +33,143 @@ const client = new Client({
 });
 
 // ============================================
-// DATABASE SCHEMAS
-// ============================================
-
-// License Code Schema (8 char hex, e.g. a12e137e)
-const licenseSchema = new mongoose.Schema({
-    code: { type: String, required: true, unique: true, lowercase: true },
-    status: { type: String, enum: ['unused', 'redeemed'], default: 'unused' },
-    redeemedBy: { type: String, default: null },      // Discord ID
-    redeemedAt: { type: Date, default: null },
-    redeemedTag: { type: String, default: null },      // user#0000
-    generatedKey: { type: String, default: null },     // 24 char hex lifetime key
-    createdAt: { type: Date, default: Date.now }
-});
-
-// Lifetime Key Schema (24 char hex, e.g. f03d3260914a9475faf29b12)
-const lifetimeKeySchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true, lowercase: true },
-    licenseCode: { type: String, required: true },
-
-    // Owner - only this Discord can use/manage
-    discordId: { type: String, required: true },
-    discordTag: { type: String, required: true },
-
-    // HWID binding
-    boundHWIDs: { type: [String], default: [] },
-
-    // HWID reset (every 7 days)
-    lastHWIDReset: { type: Date, default: null },
-    nextResetAvailable: { type: Date, default: null },
-
-    // Usage tracking
-    totalUses: { type: Number, default: 0 },
-    lastUsed: { type: Date, default: null },
-
-    // Status
-    status: { type: String, enum: ['active', 'banned'], default: 'active' },
-    createdAt: { type: Date, default: Date.now }
-});
-
-// Free Key Schema (24h, HWID locked, 1 device)
-const freeKeySchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true },
-    userId: { type: String, required: true },
-    hwid: { type: String, default: null },
-    tier: { type: String, default: 'free' },
-    features: { type: [String], default: ['basic'] },
-    expiresAt: { type: Date, required: true },
-    uses: { type: Number, default: 0 },
-    maxUses: { type: Number, default: -1 },
-    status: { type: String, enum: ['active', 'expired', 'banned'], default: 'active' },
-    source: { type: String, default: 'linkvertise' },
-    createdAt: { type: Date, default: Date.now }
-});
-
-// Blacklist Schema
-const blacklistSchema = new mongoose.Schema({
-    userId: { type: String, required: true, unique: true },
-    reason: { type: String, default: '' },
-    addedAt: { type: Date, default: Date.now }
-});
-
-const License = mongoose.model('License', licenseSchema);
-const LifetimeKey = mongoose.model('LifetimeKey', lifetimeKeySchema);
-const FreeKey = mongoose.model('FreeKey', freeKeySchema);
-const Blacklist = mongoose.model('Blacklist', blacklistSchema);
-
-// ============================================
 // CONSTANTS
 // ============================================
 
-const PREFIX = '!';
 const HWID_RESET_DAYS = 7;
 const FREE_KEY_EXPIRY_HOURS = 24;
-
 const ADMIN_ROLE_IDS = (process.env.ADMIN_ROLE_IDS || '').split(',').filter(Boolean);
+const ITEMS_PER_PAGE = 10;
+
+const ICON = {
+    KEY:    '[KEY]',
+    OK:     '[OK]',
+    ERR:    '[X]',
+    WARN:   '[!]',
+    INFO:   '[i]',
+    ARROW:  '>>',
+    LOCK:   '[LOCK]',
+    UNLOCK: '[UNLOCK]',
+    BAN:    '[BAN]',
+    UNBAN:  '[UNBAN]',
+    STATS:  '[STATS]',
+    USER:   '[USER]',
+    SHIELD: '[SHIELD]',
+    STAR:   '[*]',
+    CLOCK:  '[CLOCK]',
+    DEV:    '[DEV]',
+    LIST:   '[LIST]',
+    GEN:    '[GEN]',
+    SEARCH: '[?]',
+    PAGE:   '[PAGE]',
+    FILE:   '[FILE]',
+    COPY:   '[COPY]'
+};
+
+const COLORS = {
+    GREEN:  0x00ff00,
+    RED:    0xff0000,
+    BLUE:   0x667eea,
+    ORANGE: 0xff9900,
+    GRAY:   0x999999,
+    PURPLE: 0x9b59b6
+};
+
+// ============================================
+// COOLDOWN SYSTEM
+// ============================================
+
+const cooldowns = new Map();
+
+function checkCooldown(userId, command, seconds = 5) {
+    const key = `${userId}:${command}`;
+    const now = Date.now();
+    const cooldownEnd = cooldowns.get(key) || 0;
+
+    if (now < cooldownEnd) {
+        return { allowed: false, remaining: Math.ceil((cooldownEnd - now) / 1000) };
+    }
+
+    cooldowns.set(key, now + seconds * 1000);
+    return { allowed: true };
+}
+
+// ============================================
+// LOGGING SYSTEM
+// ============================================
+
+async function logAction(action, details) {
+    const logChannel = client.channels.cache.get(process.env.LOG_CHANNEL_ID);
+    if (!logChannel) return;
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.INFO} ${action}`)
+        .setColor(COLORS.BLUE)
+        .addFields(
+            { name: `${ICON.USER} Admin`, value: details.admin || 'System', inline: true },
+            { name: `${ICON.INFO} Details`, value: details.message || 'N/A', inline: false }
+        )
+        .setTimestamp();
+
+    if (details.target) {
+        embed.addFields({ name: `${ICON.USER} Target`, value: details.target, inline: true });
+    }
+
+    logChannel.send({ embeds: [embed] }).catch(() => {});
+}
+
+// ============================================
+// DATABASE SCHEMAS
+// ============================================
+
+const licenseSchema = new mongoose.Schema({
+    code:        { type: String, required: true, unique: true, lowercase: true },
+    status:      { type: String, enum: ['unused', 'redeemed'], default: 'unused' },
+    redeemedBy:  { type: String, default: null },
+    redeemedAt:  { type: Date, default: null },
+    redeemedTag: { type: String, default: null },
+    generatedKey:{ type: String, default: null },
+    createdAt:   { type: Date, default: Date.now }
+});
+
+const lifetimeKeySchema = new mongoose.Schema({
+    key:                { type: String, required: true, unique: true, lowercase: true },
+    licenseCode:        { type: String, required: true },
+    discordId:          { type: String, required: true },
+    discordTag:         { type: String, required: true },
+    boundHWIDs:         { type: [String], default: [] },
+    lastHWIDReset:      { type: Date, default: null },
+    nextResetAvailable: { type: Date, default: null },
+    totalUses:          { type: Number, default: 0 },
+    lastUsed:           { type: Date, default: null },
+    status:             { type: String, enum: ['active', 'banned'], default: 'active' },
+    createdAt:          { type: Date, default: Date.now }
+});
+
+const freeKeySchema = new mongoose.Schema({
+    key:       { type: String, required: true, unique: true },
+    userId:    { type: String, required: true },
+    hwid:      { type: String, default: null },
+    tier:      { type: String, default: 'free' },
+    features:  { type: [String], default: ['basic'] },
+    expiresAt: { type: Date, required: true },
+    uses:      { type: Number, default: 0 },
+    maxUses:   { type: Number, default: -1 },
+    status:    { type: String, enum: ['active', 'expired', 'banned'], default: 'active' },
+    source:    { type: String, default: 'discord' },
+    createdAt: { type: Date, default: Date.now }
+});
+
+const blacklistSchema = new mongoose.Schema({
+    userId:   { type: String, required: true, unique: true },
+    reason:   { type: String, default: '' },
+    addedAt:  { type: Date, default: Date.now }
+});
+
+const License     = mongoose.model('License', licenseSchema);
+const LifetimeKey = mongoose.model('LifetimeKey', lifetimeKeySchema);
+const FreeKey     = mongoose.model('FreeKey', freeKeySchema);
+const Blacklist   = mongoose.model('Blacklist', blacklistSchema);
 
 // ============================================
 // UTILITY FUNCTIONS
@@ -97,55 +177,84 @@ const ADMIN_ROLE_IDS = (process.env.ADMIN_ROLE_IDS || '').split(',').filter(Bool
 
 function generateLifetimeKey() {
     const chars = '0123456789abcdef';
-    let key = '';
-    for (let i = 0; i < 24; i++) {
-        key += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return key;
+    return Array.from({ length: 24 }, () => chars[Math.floor(Math.random() * 16)]).join('');
 }
 
 function generateLicenseCode() {
     const chars = '0123456789abcdef';
-    let code = '';
-    for (let i = 0; i < 8; i++) {
-        code += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return code;
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * 16)]).join('');
 }
 
 function generateFreeKey() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let key = 'PAWZ';
-    for (let i = 0; i < 3; i++) {
-        key += '-';
-        for (let j = 0; j < 4; j++) {
-            key += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-    }
-    return key;
+    const part = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return `PAWZ-${part()}-${part()}-${part()}`;
 }
 
 function isAdmin(member) {
     if (member.permissions.has('Administrator')) return true;
     if (ADMIN_ROLE_IDS.length === 0) {
-        // Fallback: check for role names
-        return member.roles.cache.some(r =>
-            r.name === 'Admin' || r.name === 'PawZHub Admin' || r.name === 'Owner'
-        );
+        return member.roles.cache.some(r => ['Admin', 'PawZHub Admin', 'Owner'].includes(r.name));
     }
     return member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
 }
 
 function daysUntil(date) {
     if (!date) return 0;
-    const diff = date.getTime() - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86400000));
 }
 
 function hoursUntil(date) {
     if (!date) return 0;
-    const diff = date.getTime() - Date.now();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60)));
+    return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 3600000));
+}
+
+function formatDate(date) {
+    if (!date) return 'N/A';
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function createConfirmButtons(id) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`${id}_confirm`)
+            .setLabel('Confirm')
+            .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+            .setCustomId(`${id}_cancel`)
+            .setLabel('Cancel')
+            .setStyle(ButtonStyle.Secondary)
+    );
+}
+
+function createPaginationButtons(page, totalPages) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('page_first')
+            .setLabel('<< First')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 1),
+        new ButtonBuilder()
+            .setCustomId('page_prev')
+            .setLabel('< Prev')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page === 1),
+        new ButtonBuilder()
+            .setCustomId('page_info')
+            .setLabel(`${page} / ${totalPages}`)
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true),
+        new ButtonBuilder()
+            .setCustomId('page_next')
+            .setLabel('Next >')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page === totalPages),
+        new ButtonBuilder()
+            .setCustomId('page_last')
+            .setLabel('Last >>')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === totalPages)
+    );
 }
 
 // ============================================
@@ -155,245 +264,469 @@ function hoursUntil(date) {
 client.on('ready', () => {
     console.log(`[PawZHub] Bot online: ${client.user.tag}`);
     console.log(`[PawZHub] Servers: ${client.guilds.cache.size}`);
+    console.log(`[PawZHub] Commands: slash commands ready`);
 });
 
 // ============================================
-// MESSAGE HANDLER
+// COMMAND HANDLER
 // ============================================
 
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    if (!message.content.startsWith(PREFIX)) return;
+client.on('interactionCreate', async (interaction) => {
+    // Handle slash commands
+    if (interaction.isChatInputCommand()) {
+        const handlers = {
+            redeem:   handleRedeem,
+            mykeys:   handleMyKeys,
+            resetkey: handleResetKey,
+            freekey:  handleFreeKey,
+            help:     handleHelp,
+            admin:    handleAdmin
+        };
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+        const handler = handlers[interaction.commandName];
+        if (!handler) return;
+
+        try {
+            await handler(interaction);
+        } catch (err) {
+            console.error(`[Error] ${interaction.commandName}:`, err);
+            const msg = { content: `${ICON.ERR} An error occurred. Contact admin.`, ephemeral: true };
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp(msg).catch(() => {});
+            } else {
+                await interaction.reply(msg).catch(() => {});
+            }
+        }
+    }
+
+    // Handle buttons
+    if (interaction.isButton()) {
+        await handleButton(interaction);
+    }
+
+    // Handle select menus
+    if (interaction.isStringSelectMenu()) {
+        await handleSelectMenu(interaction);
+    }
+});
+
+// ============================================
+// BUTTON HANDLER
+// ============================================
+
+async function handleButton(interaction) {
+    const [action, id, extra] = interaction.customId.split('_');
 
     try {
-        // --- User Commands ---
-        switch (command) {
-            case 'redeem':
-                await cmdRedeem(message, args);
+        switch (action) {
+            case 'page':
+                await handlePagination(interaction);
                 break;
-            case 'mykey':
-            case 'keys':
-                await cmdMyKeys(message);
+            case 'copy':
+                await handleCopyButton(interaction);
                 break;
-            case 'resetkey':
-                await cmdResetKey(message, args);
+            case 'ban':
+            case 'unban':
+                if (extra === 'confirm') await handleBanConfirm(interaction, action);
+                else if (extra === 'cancel') await handleBanCancel(interaction);
                 break;
-            case 'getkey':
-            case 'freekey':
-                await cmdFreeKey(message, args);
-                break;
-            case 'help':
-                await cmdHelp(message);
-                break;
-
-            // --- Admin Commands ---
-            case 'admin':
-                await handleAdmin(message, args);
+            case 'bl':
+                if (extra === 'confirm') await handleBlacklistConfirm(interaction);
+                else if (extra === 'cancel') await handleBlacklistCancel(interaction);
                 break;
         }
     } catch (err) {
-        console.error(`[Error] ${command}:`, err);
-        message.reply('An error occurred. Contact admin.').catch(() => {});
+        console.error('[Button Error]', err);
+        await interaction.reply({ content: `${ICON.ERR} Error processing action.`, ephemeral: true }).catch(() => {});
     }
-});
+}
+
+// Pagination
+async function handlePagination(interaction) {
+    const page = parseInt(interaction.message.embeds[0]?.footer?.text?.match(/\d+/)?.[0] || 1);
+    const totalPages = parseInt(interaction.message.embeds[0]?.footer?.text?.match(/\/ (\d+)/)?.[1] || 1);
+
+    let newPage = page;
+    switch (interaction.customId) {
+        case 'page_first': newPage = 1; break;
+        case 'page_prev':  newPage = Math.max(1, page - 1); break;
+        case 'page_next':  newPage = Math.min(totalPages, page + 1); break;
+        case 'page_last':  newPage = totalPages; break;
+    }
+
+    await interaction.deferUpdate();
+
+    const licenses = await License.find().sort({ createdAt: -1 });
+    const start = (newPage - 1) * ITEMS_PER_PAGE;
+    const chunk = licenses.slice(start, start + ITEMS_PER_PAGE);
+
+    const lines = chunk.map((l, i) => {
+        const num = start + i + 1;
+        const status = l.status === 'unused' ? '[UNUSED]' : `[USED]`;
+        return `${num}. ${l.code} ${status}`;
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.LIST} Licenses (Page ${newPage}/${totalPages})`)
+        .setColor(COLORS.BLUE)
+        .setDescription('```\n' + lines.join('\n') + '\n```')
+        .setFooter({ text: `Page ${newPage} / ${totalPages} | Total: ${licenses.length}` })
+        .setTimestamp();
+
+    await interaction.editReply({
+        embeds: [embed],
+        components: [createPaginationButtons(newPage, totalPages)]
+    });
+}
+
+// Copy key button
+async function handleCopyButton(interaction) {
+    const key = interaction.customId.replace('copy_', '');
+    await interaction.reply({ content: `${ICON.COPY} Key copied to clipboard!\n\`${key}\``, ephemeral: true });
+}
+
+// Ban confirm
+async function handleBanConfirm(interaction, action) {
+    await interaction.deferUpdate();
+
+    const keyInput = interaction.message.embeds[0]?.fields?.find(f => f.name.includes('Key'))?.value?.replace(/[`]/g, '');
+    if (!keyInput) return;
+
+    const keyData = await LifetimeKey.findOne({ key: keyInput });
+    if (!keyData) return;
+
+    if (action === 'ban') {
+        keyData.status = 'banned';
+        await keyData.save();
+
+        const embed = new EmbedBuilder()
+            .setTitle(`${ICON.BAN} Key Banned`)
+            .setColor(COLORS.RED)
+            .setDescription(`${ICON.OK} Key has been banned successfully.`)
+            .addFields(
+                { name: `${ICON.KEY} Key`,    value: `\`${keyData.key}\``,        inline: true },
+                { name: `${ICON.USER} Owner`, value: `<@${keyData.discordId}>`,   inline: true },
+                { name: `${ICON.SHIELD} By`,  value: interaction.user.tag,        inline: true }
+            )
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed], components: [] });
+        await logAction('Key Banned', { admin: interaction.user.tag, target: `\`${keyData.key}\``, message: `Banned key owned by <@${keyData.discordId}>` });
+    } else {
+        keyData.status = 'active';
+        await keyData.save();
+
+        const embed = new EmbedBuilder()
+            .setTitle(`${ICON.UNBAN} Key Unbanned`)
+            .setColor(COLORS.GREEN)
+            .setDescription(`${ICON.OK} Key has been unbanned successfully.`)
+            .addFields(
+                { name: `${ICON.KEY} Key`,    value: `\`${keyData.key}\``,        inline: true },
+                { name: `${ICON.USER} Owner`, value: `<@${keyData.discordId}>`,   inline: true },
+                { name: `${ICON.SHIELD} By`,  value: interaction.user.tag,        inline: true }
+            )
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed], components: [] });
+        await logAction('Key Unbanned', { admin: interaction.user.tag, target: `\`${keyData.key}\``, message: `Unbanned key owned by <@${keyData.discordId}>` });
+    }
+}
+
+// Ban cancel
+async function handleBanCancel(interaction) {
+    await interaction.deferUpdate();
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.CANCEL} Action Cancelled`)
+        .setColor(COLORS.GRAY)
+        .setDescription(`${ICON.INFO} The action has been cancelled.`)
+        .setTimestamp();
+    await interaction.editReply({ embeds: [embed], components: [] });
+}
+
+// Blacklist confirm
+async function handleBlacklistConfirm(interaction) {
+    await interaction.deferUpdate();
+
+    const userId = interaction.message.embeds[0]?.fields?.find(f => f.name.includes('User'))?.value?.replace(/[<@>]/g, '');
+    const reason = interaction.message.embeds[0]?.fields?.find(f => f.name.includes('Reason'))?.value || 'No reason';
+
+    if (!userId) return;
+
+    const exists = await Blacklist.findOne({ userId });
+    if (exists) {
+        return interaction.editReply({ content: `${ICON.WARN} User is already blacklisted.`, embeds: [], components: [] });
+    }
+
+    await Blacklist.create({ userId, reason });
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.BAN} User Blacklisted`)
+        .setColor(COLORS.RED)
+        .setDescription(`${ICON.OK} User has been blacklisted successfully.`)
+        .addFields(
+            { name: `${ICON.USER} User`,   value: `<@${userId}>`,      inline: true },
+            { name: `${ICON.INFO} Reason`, value: reason,              inline: true },
+            { name: `${ICON.SHIELD} By`,   value: interaction.user.tag, inline: true }
+        )
+        .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], components: [] });
+    await logAction('User Blacklisted', { admin: interaction.user.tag, target: `<@${userId}>`, message: `Reason: ${reason}` });
+}
+
+// Blacklist cancel
+async function handleBlacklistCancel(interaction) {
+    await interaction.deferUpdate();
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.WARN} Action Cancelled`)
+        .setColor(COLORS.GRAY)
+        .setDescription(`${ICON.INFO} The action has been cancelled.`)
+        .setTimestamp();
+    await interaction.editReply({ embeds: [embed], components: [] });
+}
+
+// ============================================
+// SELECT MENU HANDLER
+// ============================================
+
+async function handleSelectMenu(interaction) {
+    if (interaction.customId === 'select_license') {
+        const code = interaction.values[0];
+        const license = await License.findOne({ code });
+
+        if (!license) {
+            return interaction.reply({ content: `${ICON.ERR} License not found.`, ephemeral: true });
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle(`${ICON.SEARCH} License Info`)
+            .setColor(license.status === 'unused' ? COLORS.GREEN : COLORS.GRAY)
+            .addFields(
+                { name: `${ICON.KEY} Code`,      value: `\`${license.code}\``,          inline: true },
+                { name: `${ICON.INFO} Status`,   value: license.status,                 inline: true },
+                { name: `${ICON.CLOCK} Created`, value: formatDate(license.createdAt),  inline: true }
+            );
+
+        if (license.status === 'redeemed') {
+            embed.addFields(
+                { name: `${ICON.USER} Redeemed By`,  value: `<@${license.redeemedBy}>`, inline: true },
+                { name: `${ICON.CLOCK} Redeemed At`, value: formatDate(license.redeemedAt), inline: true },
+                { name: `${ICON.KEY} Generated Key`, value: `\`${license.generatedKey}\``, inline: false }
+            );
+        }
+
+        await interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+}
 
 // ============================================
 // USER COMMANDS
 // ============================================
 
-// !redeem <license_code> - Redeem license to get lifetime key
-async function cmdRedeem(message, args) {
-    if (!args[0]) {
-        return message.reply(
-            'Usage: `!redeem <license_code>`\n' +
-            'Example: `!redeem a12e137e`'
-        );
+// /redeem <code>
+async function handleRedeem(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'redeem', 10);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s before using this command again.`, ephemeral: true });
     }
 
-    const code = args[0].toLowerCase();
+    await interaction.deferReply();
 
-    // Validate format: 8 char hex
+    const code = interaction.options.getString('code').toLowerCase();
+
     if (!/^[a-f0-9]{8}$/.test(code)) {
-        return message.reply(
-            'Invalid format.\n' +
-            'License code must be 8 characters (hex).\n' +
-            'Example: `a12e137e`'
+        return interaction.editReply(
+            `${ICON.ERR} Invalid format. License code must be 8 hex characters.\nExample: \`a12e137e\``
         );
     }
 
     const license = await License.findOne({ code });
-
     if (!license) {
-        return message.reply('Invalid license code. Check and try again.');
+        return interaction.editReply(`${ICON.ERR} Invalid license code. Check and try again.`);
     }
 
     if (license.status === 'redeemed') {
-        return message.reply(
-            `This license was already redeemed by <@${license.redeemedBy}>.`
-        );
+        return interaction.editReply(`${ICON.WARN} This license was already redeemed by <@${license.redeemedBy}>.`);
     }
 
-    // Generate lifetime key
     const lifetimeKey = generateLifetimeKey();
 
-    // Create lifetime key in DB
     await LifetimeKey.create({
         key: lifetimeKey,
         licenseCode: code,
-        discordId: message.author.id,
-        discordTag: message.author.tag,
-        nextResetAvailable: new Date(Date.now() + HWID_RESET_DAYS * 24 * 60 * 60 * 1000)
+        discordId: interaction.user.id,
+        discordTag: interaction.user.tag,
+        nextResetAvailable: new Date(Date.now() + HWID_RESET_DAYS * 86400000)
     });
 
-    // Mark license as redeemed
     license.status = 'redeemed';
-    license.redeemedBy = message.author.id;
+    license.redeemedBy = interaction.user.id;
     license.redeemedAt = new Date();
-    license.redeemedTag = message.author.tag;
+    license.redeemedTag = interaction.user.tag;
     license.generatedKey = lifetimeKey;
     await license.save();
 
-    // DM the key to user
+    const copyButton = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`copy_${lifetimeKey}`)
+            .setLabel('Copy Key')
+            .setStyle(ButtonStyle.Success)
+    );
+
     const dmEmbed = new EmbedBuilder()
-        .setTitle('License Redeemed')
-        .setColor(0x00ff00)
-        .setDescription('Your Lifetime key has been generated.')
+        .setTitle(`${ICON.KEY} License Redeemed`)
+        .setColor(COLORS.GREEN)
+        .setDescription(`${ICON.OK} Your Lifetime key has been generated.`)
         .addFields(
-            { name: 'Lifetime Key', value: `\`${lifetimeKey}\``, inline: false },
-            { name: 'License Code', value: `\`${code}\``, inline: true },
-            { name: 'Duration', value: 'Lifetime', inline: true },
-            { name: 'HWID Reset', value: `Every ${HWID_RESET_DAYS} days`, inline: true }
+            { name: `${ICON.KEY} Lifetime Key`,    value: `\`${lifetimeKey}\``,             inline: false },
+            { name: `${ICON.INFO} License Code`,   value: `\`${code}\``,                    inline: true },
+            { name: `${ICON.CLOCK} Duration`,      value: `Lifetime`,                       inline: true },
+            { name: `${ICON.DEVICE} HWID Reset`,   value: `Every ${HWID_RESET_DAYS} days`,  inline: true }
         )
-        .setFooter({ text: 'Keep this key private!' })
+        .setFooter({ text: `${ICON.LOCK} Keep this key private!` })
         .setTimestamp();
 
     try {
-        await message.author.send({ embeds: [dmEmbed] });
-        message.reply('License redeemed! Check your DMs.');
+        await interaction.user.send({ embeds: [dmEmbed], components: [copyButton] });
+        await interaction.editReply(`${ICON.OK} License redeemed! Check your DMs.`);
     } catch {
-        message.reply(
-            'License redeemed but I could not DM you.\n' +
-            'Enable DMs from server members and try `!mykey`.'
+        await interaction.editReply(
+            `${ICON.OK} License redeemed but I could not DM you.\n` +
+            `Enable DMs from server members, then use \`/mykeys\`.`
         );
     }
 
-    console.log(`[Redeem] ${code} -> ${message.author.tag}`);
+    await logAction('License Redeemed', {
+        admin: interaction.user.tag,
+        target: `\`${code}\``,
+        message: `Generated key: \`${lifetimeKey.slice(0, 8)}...\``
+    });
+
+    console.log(`[Redeem] ${code} -> ${interaction.user.tag}`);
 }
 
-// !mykeys - View your lifetime keys
-async function cmdMyKeys(message) {
-    const keys = await LifetimeKey.find({ discordId: message.author.id });
+// /mykeys
+async function handleMyKeys(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const keys = await LifetimeKey.find({ discordId: interaction.user.id });
 
     if (keys.length === 0) {
-        return message.reply(
-            'You have no keys.\n' +
-            'Purchase a license and use `!redeem <code>` to get one.'
+        return interaction.editReply(
+            `${ICON.INFO} You have no keys.\n` +
+            `Purchase a license and use \`/redeem <code>\` to get one.`
         );
     }
 
     const embed = new EmbedBuilder()
-        .setTitle('Your Lifetime Keys')
-        .setColor(0x667eea)
-        .setDescription(`You have **${keys.length}** lifetime key(s).`)
+        .setTitle(`${ICON.KEY} Your Lifetime Keys`)
+        .setColor(COLORS.BLUE)
+        .setDescription(`${ICON.OK} You have **${keys.length}** lifetime key(s).`)
         .setTimestamp();
 
     for (const k of keys) {
         const resetDays = daysUntil(k.nextResetAvailable);
-        const resetText = resetDays > 0 ? `${resetDays}d` : 'Available now';
-        const hwidCount = k.boundHWIDs.length;
+        const resetText = resetDays > 0 ? `In ${resetDays}d` : `${ICON.OK} Available now`;
 
         embed.addFields({
-            name: `Key: \`${k.key.slice(0, 8)}...\` [${k.status}]`,
+            name: `${ICON.KEY} \`${k.key.slice(0, 8)}...\` [${k.status}]`,
             value: [
-                `License: \`${k.licenseCode}\``,
-                `Devices: ${hwidCount} bound`,
-                `HWID Reset: ${resetText}`,
-                `Uses: ${k.totalUses}`
+                `${ICON.INFO} License: \`${k.licenseCode}\``,
+                `${ICON.DEVICE} Devices: ${k.boundHWIDs.length} bound`,
+                `${ICON.CLOCK} HWID Reset: ${resetText}`,
+                `${ICON.STATS} Uses: ${k.totalUses}`
             ].join('\n'),
             inline: false
         });
     }
 
     try {
-        await message.author.send({ embeds: [embed] });
-        message.reply('Check your DMs!');
+        await interaction.user.send({ embeds: [embed] });
+        await interaction.editReply(`${ICON.OK} Check your DMs!`);
     } catch {
-        message.reply('Could not DM you. Enable DMs from server members.');
+        await interaction.editReply(`${ICON.ERR} Could not DM you. Enable DMs from server members.`);
     }
 }
 
-// !resetkey <lifetime_key> - Reset HWID (every 7 days)
-async function cmdResetKey(message, args) {
-    if (!args[0]) {
-        return message.reply(
-            'Usage: `!resetkey <lifetime_key>`\n' +
-            'Example: `!resetkey f03d3260914a9475faf29b12`'
-        );
+// /resetkey <key>
+async function handleResetKey(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'resetkey', 10);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s.`, ephemeral: true });
     }
 
-    const keyInput = args[0].toLowerCase();
+    await interaction.deferReply();
+
+    const keyInput = interaction.options.getString('key').toLowerCase();
 
     const keyData = await LifetimeKey.findOne({
         key: keyInput,
-        discordId: message.author.id
+        discordId: interaction.user.id
     });
 
     if (!keyData) {
-        return message.reply('Key not found or you do not own this key.');
+        return interaction.editReply(`${ICON.ERR} Key not found or you do not own this key.`);
     }
 
-    // Check 7-day cooldown
     if (keyData.nextResetAvailable && Date.now() < keyData.nextResetAvailable.getTime()) {
         const hrs = hoursUntil(keyData.nextResetAvailable);
         const dys = daysUntil(keyData.nextResetAvailable);
-        return message.reply(
-            `HWID reset not available yet.\n` +
-            `Available in ${dys} day(s) (${hrs} hours).`
+        return interaction.editReply(
+            `${ICON.WARN} HWID reset not available yet.\nAvailable in ${dys} day(s) (${hrs} hours).`
         );
     }
 
     const clearedCount = keyData.boundHWIDs.length;
     keyData.boundHWIDs = [];
     keyData.lastHWIDReset = new Date();
-    keyData.nextResetAvailable = new Date(Date.now() + HWID_RESET_DAYS * 24 * 60 * 60 * 1000);
+    keyData.nextResetAvailable = new Date(Date.now() + HWID_RESET_DAYS * 86400000);
     await keyData.save();
 
     const embed = new EmbedBuilder()
-        .setTitle('HWID Reset Successful')
-        .setColor(0x00ff00)
+        .setTitle(`${ICON.OK} HWID Reset Successful`)
+        .setColor(COLORS.GREEN)
+        .setDescription(`${ICON.OK} All devices cleared. You can now use this key on new devices.`)
         .addFields(
-            { name: 'Key', value: `\`${keyInput.slice(0, 8)}...\``, inline: true },
-            { name: 'Devices Cleared', value: `${clearedCount}`, inline: true },
-            { name: 'Next Reset', value: `${HWID_RESET_DAYS} days`, inline: true }
+            { name: `${ICON.KEY} Key`,              value: `\`${keyInput.slice(0, 8)}...\``, inline: true },
+            { name: `${ICON.DEVICE} Devices Cleared`, value: `${clearedCount}`,               inline: true },
+            { name: `${ICON.CLOCK} Next Reset`,     value: `${HWID_RESET_DAYS} days`,        inline: true }
         )
-        .setFooter({ text: 'You can now use this key on new devices.' })
+        .setFooter({ text: `${ICON.UNLOCK} Key is now unbound from all devices.` })
         .setTimestamp();
 
     try {
-        await message.author.send({ embeds: [embed] });
-        message.reply('HWID reset successful!');
+        await interaction.user.send({ embeds: [embed] });
+        await interaction.editReply(`${ICON.OK} HWID reset successful! Check your DMs.`);
     } catch {
-        message.reply('HWID reset successful but could not DM you.');
+        await interaction.editReply(`${ICON.OK} HWID reset successful but could not DM you.`);
     }
 
-    console.log(`[HWID Reset] ${keyInput.slice(0, 8)}... by ${message.author.tag}`);
+    await logAction('HWID Reset', {
+        admin: interaction.user.tag,
+        target: `\`${keyInput.slice(0, 8)}...\``,
+        message: `Cleared ${clearedCount} device(s)`
+    });
+
+    console.log(`[HWID Reset] ${keyInput.slice(0, 8)}... by ${interaction.user.tag}`);
 }
 
-// !freekey - Get a free 24h key via Linkvertise
-async function cmdFreeKey(message, args) {
-    const userId = message.author.id;
-    const hwid = args[0] || null;
-
-    // Check blacklist
-    const blacklisted = await Blacklist.findOne({ userId });
-    if (blacklisted) {
-        return message.reply('You are blacklisted from free keys.');
+// /freekey [hwid]
+async function handleFreeKey(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'freekey', 30);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s.`, ephemeral: true });
     }
 
-    // Check if user already has active free key
+    await interaction.deferReply();
+
+    const userId = interaction.user.id;
+    const hwid = interaction.options.getString('hwid') || null;
+
+    const blacklisted = await Blacklist.findOne({ userId });
+    if (blacklisted) {
+        return interaction.editReply(`${ICON.BAN} You are blacklisted from free keys.`);
+    }
+
     const existing = await FreeKey.findOne({
         userId,
         status: 'active',
@@ -401,13 +734,13 @@ async function cmdFreeKey(message, args) {
     });
 
     if (existing) {
-        return message.reply(
-            `You already have an active key:\n\`${existing.key}\`\n` +
+        return interaction.editReply(
+            `${ICON.WARN} You already have an active key:\n` +
+            `\`${existing.key}\`\n` +
             `Expires: <t:${Math.floor(existing.expiresAt.getTime() / 1000)}:R>`
         );
     }
 
-    // Generate free key (24h)
     const key = generateFreeKey();
 
     await FreeKey.create({
@@ -416,427 +749,463 @@ async function cmdFreeKey(message, args) {
         hwid,
         tier: 'free',
         features: ['basic'],
-        expiresAt: new Date(Date.now() + FREE_KEY_EXPIRY_HOURS * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + FREE_KEY_EXPIRY_HOURS * 3600000),
         maxUses: -1,
         source: 'discord'
     });
 
+    const copyButton = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`copy_${key}`)
+            .setLabel('Copy Key')
+            .setStyle(ButtonStyle.Success)
+    );
+
     const embed = new EmbedBuilder()
-        .setTitle('Free Key Generated')
-        .setColor(0x667eea)
+        .setTitle(`${ICON.KEY} Free Key Generated`)
+        .setColor(COLORS.BLUE)
         .setDescription(`\`${key}\``)
         .addFields(
-            { name: 'Duration', value: `${FREE_KEY_EXPIRY_HOURS} hours`, inline: true },
-            { name: 'Devices', value: '1 (HWID locked)', inline: true },
-            { name: 'Uses', value: 'Unlimited', inline: true },
-            { name: 'Features', value: 'Basic', inline: true }
+            { name: `${ICON.CLOCK} Duration`, value: `${FREE_KEY_EXPIRY_HOURS} hours`,   inline: true },
+            { name: `${ICON.DEVICE} Device`,  value: `1 (HWID locked)`,                  inline: true },
+            { name: `${ICON.STATS} Uses`,     value: `Unlimited`,                        inline: true },
+            { name: `${ICON.STAR} Features`,  value: `Basic`,                            inline: true }
         )
-        .setFooter({ text: 'This key expires in 24 hours.' })
+        .setFooter({ text: `${ICON.CLOCK} This key expires in 24 hours.` })
         .setTimestamp();
 
     try {
-        await message.author.send({ embeds: [embed] });
-        message.reply('Free key generated! Check your DMs.');
+        await interaction.user.send({ embeds: [embed], components: [copyButton] });
+        await interaction.editReply(`${ICON.OK} Free key generated! Check your DMs.`);
     } catch {
-        message.reply('Could not DM you. Enable DMs and try again.');
+        await interaction.editReply(`${ICON.ERR} Could not DM you. Enable DMs and try again.`);
     }
 
-    console.log(`[FreeKey] ${key} -> ${message.author.tag}`);
+    console.log(`[FreeKey] ${key} -> ${interaction.user.tag}`);
 }
 
-// !help - Show commands
-async function cmdHelp(message) {
+// /help
+async function handleHelp(interaction) {
     const embed = new EmbedBuilder()
-        .setTitle('PawZHub Commands')
-        .setColor(0x667eea)
-        .setDescription('Available commands:')
+        .setTitle(`${ICON.SHIELD} PawZHub Commands`)
+        .setColor(COLORS.BLUE)
+        .setDescription(`${ICON.INFO} Available slash commands:`)
         .addFields(
             {
-                name: 'User Commands',
+                name: `${ICON.USER} User Commands`,
                 value: [
-                    '`!redeem <code>` - Redeem license code for lifetime key',
-                    '`!mykeys` - View your lifetime keys',
-                    '`!resetkey <key>` - Reset HWID (every 7 days)',
-                    '`!freekey` - Get a free 24h key',
-                    '`!help` - Show this message'
+                    `${ICON.ARROW} \`/redeem <code>\` - Redeem license code for lifetime key`,
+                    `${ICON.ARROW} \`/mykeys\` - View your lifetime keys`,
+                    `${ICON.ARROW} \`/resetkey <key>\` - Reset HWID (every 7 days)`,
+                    `${ICON.ARROW} \`/freekey\` - Get a free 24h key`,
+                    `${ICON.ARROW} \`/help\` - Show this message`
                 ].join('\n'),
                 inline: false
             },
             {
-                name: 'How to Get Premium',
+                name: `${ICON.STAR} How to Get Premium`,
                 value: [
-                    '1. Purchase a license code',
-                    '2. Use `!redeem <code>` here',
-                    '3. Receive your lifetime key via DM',
-                    '4. Use the key in your executor'
+                    `${ICON.ARROW} 1. Purchase a license code`,
+                    `${ICON.ARROW} 2. Use \`/redeem <code>\` here`,
+                    `${ICON.ARROW} 3. Receive your lifetime key via DM`,
+                    `${ICON.ARROW} 4. Use the key in your executor`
                 ].join('\n'),
                 inline: false
             }
         )
-        .setFooter({ text: 'PawZHub v2.0' })
+        .setFooter({ text: 'PawZHub v2.1 Pro' })
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
 // ============================================
 // ADMIN COMMANDS
 // ============================================
 
-async function handleAdmin(message, args) {
-    if (!isAdmin(message.member)) {
-        return message.reply('You need Admin role to use admin commands.');
+async function handleAdmin(interaction) {
+    if (!isAdmin(interaction.member)) {
+        return interaction.reply({ content: `${ICON.SHIELD} You need Admin role.`, ephemeral: true });
     }
 
-    const sub = (args[0] || '').toLowerCase();
+    const sub = interaction.options.getSubcommand();
+    const adminHandlers = {
+        help:        adminHelp,
+        gen:         adminGen,
+        list:        adminList,
+        check:       adminCheck,
+        ban:         adminBan,
+        unban:       adminUnban,
+        blacklist:   adminBlacklist,
+        unblacklist: adminUnblacklist,
+        stats:       adminStats,
+        export:      adminExport
+    };
 
-    switch (sub) {
-        case 'help':
-            await adminHelp(message);
-            break;
-        case 'gen':
-        case 'generate':
-            await adminGenLicenses(message, args.slice(1));
-            break;
-        case 'check':
-            await adminCheck(message, args.slice(1));
-            break;
-        case 'ban':
-            await adminBan(message, args.slice(1));
-            break;
-        case 'unban':
-            await adminUnban(message, args.slice(1));
-            break;
-        case 'blacklist':
-            await adminBlacklist(message, args.slice(1));
-            break;
-        case 'unblacklist':
-            await adminUnblacklist(message, args.slice(1));
-            break;
-        case 'stats':
-            await adminStats(message);
-            break;
-        case 'list':
-            await adminListLicenses(message, args.slice(1));
-            break;
-        default:
-            await adminHelp(message);
-    }
+    const handler = adminHandlers[sub];
+    if (handler) await handler(interaction);
 }
 
-// !admin help
-async function adminHelp(message) {
+// /admin help
+async function adminHelp(interaction) {
     const embed = new EmbedBuilder()
-        .setTitle('Admin Commands')
-        .setColor(0xff6b6b)
+        .setTitle(`${ICON.SHIELD} Admin Commands`)
+        .setColor(COLORS.RED)
+        .setDescription(`${ICON.INFO} Administrative commands for PawZHub`)
         .addFields(
-            { name: '!admin gen <count>', value: 'Generate license codes (1-100)' },
-            { name: '!admin list [unused|redeemed]', value: 'List licenses' },
-            { name: '!admin check <code|key>', value: 'Check license or lifetime key info' },
-            { name: '!admin ban <key>', value: 'Ban a lifetime key' },
-            { name: '!admin unban <key>', value: 'Unban a lifetime key' },
-            { name: '!admin blacklist <user_id>', value: 'Blacklist user from free keys' },
-            { name: '!admin unblacklist <user_id>', value: 'Remove user from blacklist' },
-            { name: '!admin stats', value: 'Show system statistics' }
+            { name: `${ICON.GEN} Generate`,     value: `\`/admin gen <count>\` - Generate license codes (1-100)`,           inline: false },
+            { name: `${ICON.LIST} List`,        value: `\`/admin list [filter]\` - List licenses (all/unused/redeemed)`,     inline: false },
+            { name: `${ICON.SEARCH} Check`,     value: `\`/admin check <input>\` - Check license or lifetime key info`,      inline: false },
+            { name: `${ICON.BAN} Ban`,          value: `\`/admin ban <key>\` - Ban a lifetime key (with confirmation)`,      inline: false },
+            { name: `${ICON.UNBAN} Unban`,      value: `\`/admin unban <key>\` - Unban a lifetime key (with confirmation)`,  inline: false },
+            { name: `${ICON.USER} Blacklist`,   value: `\`/admin blacklist <userid>\` - Blacklist user (with confirmation)`,  inline: false },
+            { name: `${ICON.USER} Unblacklist`, value: `\`/admin unblacklist <userid>\` - Remove user from blacklist`,        inline: false },
+            { name: `${ICON.STATS} Stats`,      value: `\`/admin stats\` - Show system statistics`,                          inline: false },
+            { name: `${ICON.FILE} Export`,      value: `\`/admin export\` - Export licenses to file`,                        inline: false }
         )
-        .setFooter({ text: 'Admin Only' })
+        .setFooter({ text: `${ICON.SHIELD} Admin Only` })
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
-// !admin gen <count> - Generate license codes
-async function adminGenLicenses(message, args) {
-    const count = parseInt(args[0]) || 1;
+// /admin gen <count>
+async function adminGen(interaction) {
+    await interaction.deferReply();
 
-    if (count < 1 || count > 100) {
-        return message.reply('Count must be between 1 and 100.');
-    }
-
+    const count = interaction.options.getInteger('count');
     const codes = [];
 
     for (let i = 0; i < count; i++) {
         let code = generateLicenseCode();
         let attempts = 0;
-
-        // Ensure unique
         while (await License.findOne({ code }) && attempts < 100) {
             code = generateLicenseCode();
             attempts++;
         }
-
         await License.create({ code });
         codes.push(code);
     }
 
-    // Send in chunks (Discord 2000 char limit)
     const chunkSize = 25;
     for (let i = 0; i < codes.length; i += chunkSize) {
         const chunk = codes.slice(i, i + chunkSize);
-
         const embed = new EmbedBuilder()
-            .setTitle(`Generated Licenses (${i + 1}-${Math.min(i + chunkSize, codes.length)} / ${count})`)
-            .setColor(0x00ff00)
+            .setTitle(`${ICON.GEN} Generated Licenses (${i + 1}-${Math.min(i + chunkSize, codes.length)} / ${count})`)
+            .setColor(COLORS.GREEN)
             .setDescription('```\n' + chunk.join('\n') + '\n```')
-            .setFooter({ text: `Generated by ${message.author.tag}` })
+            .setFooter({ text: `${ICON.USER} Generated by ${interaction.user.tag}` })
             .setTimestamp();
-
-        await message.channel.send({ embeds: [embed] });
+        await interaction.channel.send({ embeds: [embed] });
     }
 
-    console.log(`[Admin] ${count} licenses generated by ${message.author.tag}`);
+    await interaction.editReply(`${ICON.OK} Generated ${count} license(s).`);
+    await logAction('Licenses Generated', { admin: interaction.user.tag, message: `Generated ${count} license(s)` });
+    console.log(`[Admin] ${count} licenses generated by ${interaction.user.tag}`);
 }
 
-// !admin list [unused|redeemed]
-async function adminListLicenses(message, args) {
-    const filter = {};
-    if (args[0]) {
-        filter.status = args[0].toLowerCase();
-    }
+// /admin list [filter]
+async function adminList(interaction) {
+    await interaction.deferReply({ ephemeral: true });
 
-    const licenses = await License.find(filter)
-        .sort({ createdAt: -1 })
-        .limit(50);
+    const filter = {};
+    const filterVal = interaction.options.getString('filter');
+    if (filterVal && filterVal !== 'all') filter.status = filterVal;
+
+    const licenses = await License.find(filter).sort({ createdAt: -1 }).limit(100);
 
     if (licenses.length === 0) {
-        return message.reply('No licenses found.');
+        return interaction.editReply(`${ICON.INFO} No licenses found.`);
     }
 
-    const lines = licenses.map(l => {
-        const status = l.status === 'unused' ? '[UNUSED]' : `[REDEEMED by ${l.redeemedTag || l.redeemedBy}]`;
-        return `${l.code} ${status}`;
+    const totalPages = Math.ceil(licenses.length / ITEMS_PER_PAGE);
+    const chunk = licenses.slice(0, ITEMS_PER_PAGE);
+
+    const lines = chunk.map((l, i) => {
+        const status = l.status === 'unused' ? '[UNUSED]' : `[USED]`;
+        return `${i + 1}. ${l.code} ${status}`;
     });
 
     const embed = new EmbedBuilder()
-        .setTitle(`Licenses (${licenses.length} shown)`)
-        .setColor(0x667eea)
+        .setTitle(`${ICON.LIST} Licenses (Page 1/${totalPages})`)
+        .setColor(COLORS.BLUE)
         .setDescription('```\n' + lines.join('\n') + '\n```')
+        .setFooter({ text: `Page 1 / ${totalPages} | Total: ${licenses.length}` })
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
+    const components = totalPages > 1 ? [createPaginationButtons(1, totalPages)] : [];
+
+    await interaction.editReply({ embeds: [embed], components });
 }
 
-// !admin check <code|key>
-async function adminCheck(message, args) {
-    if (!args[0]) {
-        return message.reply('Usage: `!admin check <license_code | lifetime_key>`');
-    }
+// /admin check <input>
+async function adminCheck(interaction) {
+    await interaction.deferReply({ ephemeral: true });
 
-    const input = args[0].toLowerCase();
+    const input = interaction.options.getString('input').toLowerCase();
 
     // License code: 8 char hex
     if (/^[a-f0-9]{8}$/.test(input)) {
         const license = await License.findOne({ code: input });
-
-        if (!license) {
-            return message.reply('License not found.');
-        }
+        if (!license) return interaction.editReply(`${ICON.ERR} License not found.`);
 
         const embed = new EmbedBuilder()
-            .setTitle('License Info')
-            .setColor(license.status === 'unused' ? 0x00ff00 : 0x999999)
+            .setTitle(`${ICON.SEARCH} License Info`)
+            .setColor(license.status === 'unused' ? COLORS.GREEN : COLORS.GRAY)
             .addFields(
-                { name: 'Code', value: `\`${license.code}\``, inline: true },
-                { name: 'Status', value: license.status, inline: true },
-                { name: 'Created', value: license.createdAt.toDateString(), inline: true }
+                { name: `${ICON.KEY} Code`,      value: `\`${license.code}\``,          inline: true },
+                { name: `${ICON.INFO} Status`,   value: license.status,                 inline: true },
+                { name: `${ICON.CLOCK} Created`, value: formatDate(license.createdAt),  inline: true }
             );
 
         if (license.status === 'redeemed') {
             embed.addFields(
-                { name: 'Redeemed By', value: `<@${license.redeemedBy}> (${license.redeemedTag})`, inline: true },
-                { name: 'Redeemed At', value: license.redeemedAt.toDateString(), inline: true },
-                { name: 'Generated Key', value: `\`${license.generatedKey}\``, inline: false }
+                { name: `${ICON.USER} Redeemed By`,  value: `<@${license.redeemedBy}>`, inline: true },
+                { name: `${ICON.CLOCK} Redeemed At`, value: formatDate(license.redeemedAt), inline: true },
+                { name: `${ICON.KEY} Generated Key`, value: `\`${license.generatedKey}\``, inline: false }
             );
         }
 
-        return message.reply({ embeds: [embed] });
+        return interaction.editReply({ embeds: [embed] });
     }
 
     // Lifetime key: 24 char hex
     if (/^[a-f0-9]{24}$/.test(input)) {
         const keyData = await LifetimeKey.findOne({ key: input });
-
-        if (!keyData) {
-            return message.reply('Lifetime key not found.');
-        }
+        if (!keyData) return interaction.editReply(`${ICON.ERR} Lifetime key not found.`);
 
         const resetDays = daysUntil(keyData.nextResetAvailable);
 
         const embed = new EmbedBuilder()
-            .setTitle('Lifetime Key Info')
-            .setColor(keyData.status === 'active' ? 0x00ff00 : 0xff0000)
+            .setTitle(`${ICON.SEARCH} Lifetime Key Info`)
+            .setColor(keyData.status === 'active' ? COLORS.GREEN : COLORS.RED)
             .addFields(
-                { name: 'Key', value: `\`${keyData.key}\``, inline: false },
-                { name: 'Status', value: keyData.status, inline: true },
-                { name: 'License', value: `\`${keyData.licenseCode}\``, inline: true },
-                { name: 'Owner', value: `<@${keyData.discordId}> (${keyData.discordTag})`, inline: true },
-                { name: 'Devices', value: `${keyData.boundHWIDs.length}`, inline: true },
-                { name: 'Uses', value: `${keyData.totalUses}`, inline: true },
-                { name: 'HWID Reset', value: resetDays > 0 ? `In ${resetDays}d` : 'Available now', inline: true },
-                { name: 'Created', value: keyData.createdAt.toDateString(), inline: true }
+                { name: `${ICON.KEY} Key`,        value: `\`${keyData.key}\``,                              inline: false },
+                { name: `${ICON.INFO} Status`,    value: keyData.status,                                    inline: true },
+                { name: `${ICON.KEY} License`,    value: `\`${keyData.licenseCode}\``,                      inline: true },
+                { name: `${ICON.USER} Owner`,     value: `<@${keyData.discordId}> (${keyData.discordTag})`,  inline: true },
+                { name: `${ICON.DEVICE} Devices`, value: `${keyData.boundHWIDs.length}`,                    inline: true },
+                { name: `${ICON.STATS} Uses`,     value: `${keyData.totalUses}`,                             inline: true },
+                { name: `${ICON.CLOCK} HWID Reset`, value: resetDays > 0 ? `In ${resetDays}d` : `${ICON.OK} Available now`, inline: true },
+                { name: `${ICON.CLOCK} Created`,  value: formatDate(keyData.createdAt),                     inline: true }
             );
 
         if (keyData.lastUsed) {
-            embed.addFields({ name: 'Last Used', value: keyData.lastUsed.toDateString(), inline: true });
+            embed.addFields({ name: `${ICON.CLOCK} Last Used`, value: formatDate(keyData.lastUsed), inline: true });
         }
 
         if (keyData.boundHWIDs.length > 0) {
             const hwids = keyData.boundHWIDs.map(h => `\`${h.slice(0, 12)}...\``).join('\n');
-            embed.addFields({ name: 'Bound HWIDs', value: hwids, inline: false });
+            embed.addFields({ name: `${ICON.DEVICE} Bound HWIDs`, value: hwids, inline: false });
         }
 
-        return message.reply({ embeds: [embed] });
+        return interaction.editReply({ embeds: [embed] });
     }
 
-    message.reply('Invalid format. License = 8 chars, Lifetime key = 24 chars.');
+    await interaction.editReply(`${ICON.ERR} Invalid format. License = 8 chars, Lifetime key = 24 chars.`);
 }
 
-// !admin ban <key>
-async function adminBan(message, args) {
-    if (!args[0]) {
-        return message.reply('Usage: `!admin ban <lifetime_key>`');
+// /admin ban <key> (with confirmation)
+async function adminBan(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'admin_ban', 5);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s.`, ephemeral: true });
     }
 
-    const keyData = await LifetimeKey.findOne({ key: args[0].toLowerCase() });
+    await interaction.deferReply();
 
-    if (!keyData) {
-        return message.reply('Lifetime key not found.');
-    }
+    const keyInput = interaction.options.getString('key').toLowerCase();
+    const keyData = await LifetimeKey.findOne({ key: keyInput });
 
-    if (keyData.status === 'banned') {
-        return message.reply('Key is already banned.');
-    }
-
-    keyData.status = 'banned';
-    await keyData.save();
+    if (!keyData) return interaction.editReply(`${ICON.ERR} Lifetime key not found.`);
+    if (keyData.status === 'banned') return interaction.editReply(`${ICON.WARN} Key is already banned.`);
 
     const embed = new EmbedBuilder()
-        .setTitle('Key Banned')
-        .setColor(0xff0000)
+        .setTitle(`${ICON.WARN} Confirm Ban`)
+        .setColor(COLORS.ORANGE)
+        .setDescription(`${ICON.WARN} Are you sure you want to ban this key?`)
         .addFields(
-            { name: 'Key', value: `\`${keyData.key}\``, inline: true },
-            { name: 'Owner', value: `<@${keyData.discordId}>`, inline: true },
-            { name: 'Banned By', value: message.author.tag, inline: true }
+            { name: `${ICON.KEY} Key`,    value: `\`${keyData.key}\``,        inline: true },
+            { name: `${ICON.USER} Owner`, value: `<@${keyData.discordId}>`,   inline: true },
+            { name: `${ICON.SHIELD} By`,  value: interaction.user.tag,        inline: true }
         )
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
-    console.log(`[Admin] Key banned: ${keyData.key.slice(0, 8)}... by ${message.author.tag}`);
+    const row = createConfirmButtons('ban');
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
 }
 
-// !admin unban <key>
-async function adminUnban(message, args) {
-    if (!args[0]) {
-        return message.reply('Usage: `!admin unban <lifetime_key>`');
+// /admin unban <key> (with confirmation)
+async function adminUnban(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'admin_unban', 5);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s.`, ephemeral: true });
     }
 
-    const keyData = await LifetimeKey.findOne({ key: args[0].toLowerCase() });
+    await interaction.deferReply();
 
-    if (!keyData) {
-        return message.reply('Lifetime key not found.');
-    }
+    const keyInput = interaction.options.getString('key').toLowerCase();
+    const keyData = await LifetimeKey.findOne({ key: keyInput });
 
-    if (keyData.status === 'active') {
-        return message.reply('Key is not banned.');
-    }
-
-    keyData.status = 'active';
-    await keyData.save();
+    if (!keyData) return interaction.editReply(`${ICON.ERR} Lifetime key not found.`);
+    if (keyData.status === 'active') return interaction.editReply(`${ICON.WARN} Key is not banned.`);
 
     const embed = new EmbedBuilder()
-        .setTitle('Key Unbanned')
-        .setColor(0x00ff00)
+        .setTitle(`${ICON.WARN} Confirm Unban`)
+        .setColor(COLORS.ORANGE)
+        .setDescription(`${ICON.WARN} Are you sure you want to unban this key?`)
         .addFields(
-            { name: 'Key', value: `\`${keyData.key}\``, inline: true },
-            { name: 'Owner', value: `<@${keyData.discordId}>`, inline: true },
-            { name: 'Unbanned By', value: message.author.tag, inline: true }
+            { name: `${ICON.KEY} Key`,    value: `\`${keyData.key}\``,        inline: true },
+            { name: `${ICON.USER} Owner`, value: `<@${keyData.discordId}>`,   inline: true },
+            { name: `${ICON.SHIELD} By`,  value: interaction.user.tag,        inline: true }
         )
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
-    console.log(`[Admin] Key unbanned: ${keyData.key.slice(0, 8)}... by ${message.author.tag}`);
+    const row = createConfirmButtons('unban');
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
 }
 
-// !admin blacklist <user_id>
-async function adminBlacklist(message, args) {
-    if (!args[0]) {
-        return message.reply('Usage: `!admin blacklist <user_id>`');
+// /admin blacklist <userid> [reason] (with confirmation)
+async function adminBlacklist(interaction) {
+    const cd = checkCooldown(interaction.user.id, 'admin_blacklist', 5);
+    if (!cd.allowed) {
+        return interaction.reply({ content: `${ICON.WARN} Please wait ${cd.remaining}s.`, ephemeral: true });
     }
 
-    const userId = args[0];
-    const reason = args.slice(1).join(' ') || 'No reason';
+    await interaction.deferReply();
+
+    const userId = interaction.options.getString('userid');
+    const reason = interaction.options.getString('reason') || 'No reason';
 
     const exists = await Blacklist.findOne({ userId });
-    if (exists) {
-        return message.reply('User is already blacklisted.');
-    }
+    if (exists) return interaction.editReply(`${ICON.WARN} User is already blacklisted.`);
 
-    await Blacklist.create({ userId, reason });
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.WARN} Confirm Blacklist`)
+        .setColor(COLORS.ORANGE)
+        .setDescription(`${ICON.WARN} Are you sure you want to blacklist this user?`)
+        .addFields(
+            { name: `${ICON.USER} User`,   value: `<@${userId}>`,  inline: true },
+            { name: `${ICON.INFO} Reason`, value: reason,          inline: true },
+            { name: `${ICON.SHIELD} By`,   value: interaction.user.tag, inline: true }
+        )
+        .setTimestamp();
 
-    message.reply(`User <@${userId}> blacklisted. Reason: ${reason}`);
-    console.log(`[Admin] Blacklisted ${userId} by ${message.author.tag}`);
+    const row = createConfirmButtons('bl');
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
 }
 
-// !admin unblacklist <user_id>
-async function adminUnblacklist(message, args) {
-    if (!args[0]) {
-        return message.reply('Usage: `!admin unblacklist <user_id>`');
-    }
+// /admin unblacklist <userid>
+async function adminUnblacklist(interaction) {
+    await interaction.deferReply();
 
-    const result = await Blacklist.deleteOne({ userId: args[0] });
+    const userId = interaction.options.getString('userid');
+    const result = await Blacklist.deleteOne({ userId });
 
-    if (result.deletedCount === 0) {
-        return message.reply('User is not blacklisted.');
-    }
+    if (result.deletedCount === 0) return interaction.editReply(`${ICON.INFO} User is not blacklisted.`);
 
-    message.reply(`User <@${args[0]}> removed from blacklist.`);
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.UNBAN} User Unblacklisted`)
+        .setColor(COLORS.GREEN)
+        .addFields(
+            { name: `${ICON.USER} User`,   value: `<@${userId}>`,       inline: true },
+            { name: `${ICON.SHIELD} By`,   value: interaction.user.tag, inline: true }
+        )
+        .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+    await logAction('User Unblacklisted', { admin: interaction.user.tag, target: `<@${userId}>` });
 }
 
-// !admin stats
-async function adminStats(message) {
-    const totalLicenses = await License.countDocuments();
-    const unusedLicenses = await License.countDocuments({ status: 'unused' });
-    const redeemedLicenses = await License.countDocuments({ status: 'redeemed' });
+// /admin stats
+async function adminStats(interaction) {
+    await interaction.deferReply({ ephemeral: true });
 
-    const totalKeys = await LifetimeKey.countDocuments();
-    const activeKeys = await LifetimeKey.countDocuments({ status: 'active' });
-    const bannedKeys = await LifetimeKey.countDocuments({ status: 'banned' });
+    const [
+        totalLicenses, unusedLicenses, redeemedLicenses,
+        totalKeys, activeKeys, bannedKeys,
+        totalFreeKeys, activeFreeKeys, blacklistedUsers
+    ] = await Promise.all([
+        License.countDocuments(),
+        License.countDocuments({ status: 'unused' }),
+        License.countDocuments({ status: 'redeemed' }),
+        LifetimeKey.countDocuments(),
+        LifetimeKey.countDocuments({ status: 'active' }),
+        LifetimeKey.countDocuments({ status: 'banned' }),
+        FreeKey.countDocuments(),
+        FreeKey.countDocuments({ status: 'active', expiresAt: { $gt: new Date() } }),
+        Blacklist.countDocuments()
+    ]);
 
-    const totalFreeKeys = await FreeKey.countDocuments();
-    const activeFreeKeys = await FreeKey.countDocuments({ status: 'active', expiresAt: { $gt: new Date() } });
-
-    const blacklistedUsers = await Blacklist.countDocuments();
-
-    // Aggregate total uses
     const usageResult = await LifetimeKey.aggregate([
         { $group: { _id: null, total: { $sum: '$totalUses' } } }
     ]);
     const totalUses = usageResult.length > 0 ? usageResult[0].total : 0;
 
     const embed = new EmbedBuilder()
-        .setTitle('System Statistics')
-        .setColor(0x667eea)
+        .setTitle(`${ICON.STATS} System Statistics`)
+        .setColor(COLORS.BLUE)
+        .setDescription(`${ICON.INFO} Current system overview`)
         .addFields(
-            { name: '-- Licenses --', value: '\u200b', inline: false },
-            { name: 'Total', value: `${totalLicenses}`, inline: true },
-            { name: 'Unused', value: `${unusedLicenses}`, inline: true },
-            { name: 'Redeemed', value: `${redeemedLicenses}`, inline: true },
-            { name: '-- Lifetime Keys --', value: '\u200b', inline: false },
-            { name: 'Total', value: `${totalKeys}`, inline: true },
-            { name: 'Active', value: `${activeKeys}`, inline: true },
-            { name: 'Banned', value: `${bannedKeys}`, inline: true },
-            { name: '-- Free Keys --', value: '\u200b', inline: false },
-            { name: 'Total', value: `${totalFreeKeys}`, inline: true },
-            { name: 'Active', value: `${activeFreeKeys}`, inline: true },
-            { name: '-- Other --', value: '\u200b', inline: false },
-            { name: 'Total Uses', value: `${totalUses}`, inline: true },
-            { name: 'Blacklisted', value: `${blacklistedUsers}`, inline: true },
-            { name: 'Bot Uptime', value: `${Math.floor(process.uptime() / 60)}m`, inline: true }
+            {
+                name: `${ICON.KEY} Licenses`,
+                value: `\`\`\`\nTotal:     ${totalLicenses}\nUnused:    ${unusedLicenses}\nRedeemed:  ${redeemedLicenses}\n\`\`\``,
+                inline: true
+            },
+            {
+                name: `${ICON.KEY} Lifetime Keys`,
+                value: `\`\`\`\nTotal:     ${totalKeys}\nActive:    ${activeKeys}\nBanned:    ${bannedKeys}\n\`\`\``,
+                inline: true
+            },
+            {
+                name: `${ICON.KEY} Free Keys`,
+                value: `\`\`\`\nTotal:     ${totalFreeKeys}\nActive:    ${activeFreeKeys}\n\`\`\``,
+                inline: true
+            },
+            {
+                name: `${ICON.STATS} Usage`,
+                value: `\`\`\`\nTotal Uses:      ${totalUses}\nBlacklisted:    ${blacklistedUsers}\nBot Uptime:     ${Math.floor(process.uptime() / 60)}m\n\`\`\``,
+                inline: false
+            }
         )
-        .setFooter({ text: 'PawZHub System' })
+        .setFooter({ text: 'PawZHub System v2.1 Pro' })
         .setTimestamp();
 
-    message.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
+}
+
+// /admin export
+async function adminExport(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const licenses = await License.find().sort({ createdAt: -1 });
+
+    if (licenses.length === 0) {
+        return interaction.editReply(`${ICON.INFO} No licenses to export.`);
+    }
+
+    const lines = licenses.map(l => {
+        const status = l.status === 'unused' ? 'UNUSED' : 'REDEEMED';
+        const redeemedBy = l.redeemedBy || 'N/A';
+        return `${l.code} | ${status} | ${redeemedBy} | ${formatDate(l.createdAt)}`;
+    });
+
+    const header = 'CODE | STATUS | REDEEMED_BY | CREATED\n';
+    const content = header + lines.join('\n');
+
+    const file = new AttachmentBuilder(Buffer.from(content, 'utf-8'), { name: `licenses-${Date.now()}.txt` });
+
+    const embed = new EmbedBuilder()
+        .setTitle(`${ICON.FILE} Licenses Exported`)
+        .setColor(COLORS.GREEN)
+        .setDescription(`${ICON.OK} Exported ${licenses.length} license(s) to file.`)
+        .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], files: [file] });
+    await logAction('Licenses Exported', { admin: interaction.user.tag, message: `Exported ${licenses.length} license(s)` });
 }
 
 // ============================================
