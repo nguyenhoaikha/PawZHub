@@ -117,14 +117,14 @@ local function main()
 
     local gameData = detectGame()
 
+    -- TEST MODE: Skip game check, always load key UI
     if not gameData then
-        notify("PawZHub", "This game is not supported yet!", 8)
-        warn("[PawZHub] PlaceId", game.PlaceId, "not supported")
-        return
+        print("[PawZHub] TEST MODE: Game not supported (PlaceId:", game.PlaceId, ")")
+        notify("PawZHub [TEST MODE]", "Loading key system (game not supported)", 3)
+    else
+        print("[PawZHub] Detected:", gameData.name, "(PlaceId:", game.PlaceId, ")")
+        notify("PawZHub", "Loading for " .. gameData.displayName, 3)
     end
-
-    print("[PawZHub] Detected:", gameData.name, "(PlaceId:", game.PlaceId, ")")
-    notify("PawZHub", "Loading for " .. gameData.displayName, 3)
 
     local CheckKeySystem = loadCheckKey()
 
@@ -140,10 +140,16 @@ local function main()
             print("[PawZHub] Auth successful! Key type:", session.keyType)
             print("[PawZHub] Tier:", session.keyTier, "| Features:", table.concat(session.keyFeatures, ", "))
 
-            notify("PawZHub", "Authenticated! Loading " .. gameData.displayName, 3)
-
-            task.wait(0.5)
-            loadGameScript(gameData)
+            if gameData then
+                -- Game supported: load script
+                notify("PawZHub", "Authenticated! Loading " .. gameData.displayName, 3)
+                task.wait(0.5)
+                loadGameScript(gameData)
+            else
+                -- TEST MODE: Game not supported, just show success
+                notify("PawZHub [TEST MODE]", "Authenticated! No game script available.", 5)
+                print("[PawZHub] TEST MODE: Auth success, but no script for this game")
+            end
         else
             notify("PawZHub", "Authentication failed", 5)
             warn("[PawZHub] Key verification failed")
