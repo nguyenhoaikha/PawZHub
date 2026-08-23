@@ -502,8 +502,6 @@ local function createKeyUI(callback, executorInfo)
     
     local trafficButtons = {}
     for i, color in ipairs(trafficColors) do
-    local trafficButtons = {}
-    for i, color in ipairs(trafficColors) do
         local dot = Instance.new("TextButton")  -- Thay đổi từ Frame sang TextButton
         dot.Size = UDim2.new(0, 12, 0, 12)
         dot.Position = UDim2.new(0, (i - 1) * 20, 0, 0)
