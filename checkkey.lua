@@ -107,7 +107,7 @@ function CheckKeySystem.verifyKeyFallback(key)
     return false, "Invalid key"
 end
 
--- Create UI for key input - Modern clean design
+-- Create UI for key input - Neomorphism/Clay design with 3D depth
 local function createKeyUI(callback)
     local Players = game:GetService("Players")
     local TweenService = game:GetService("TweenService")
@@ -120,151 +120,317 @@ local function createKeyUI(callback)
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- Background overlay
+    -- Background overlay with gradient
     local overlay = Instance.new("Frame")
     overlay.Size = UDim2.new(1, 0, 1, 0)
-    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    overlay.BackgroundTransparency = 0.4
+    overlay.BackgroundColor3 = Color3.fromRGB(30, 32, 42)
     overlay.BorderSizePixel = 0
     overlay.Parent = screenGui
     
-    -- Main container
+    local overlayGradient = Instance.new("UIGradient")
+    overlayGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 37, 50)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 27, 38))
+    }
+    overlayGradient.Rotation = 135
+    overlayGradient.Parent = overlay
+    
+    -- Deep shadow layer 1 (darkest, furthest)
+    local shadow1 = Instance.new("Frame")
+    shadow1.Size = UDim2.new(0, 440, 0, 260)
+    shadow1.Position = UDim2.new(0.5, -220, 0.5, -130)
+    shadow1.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    shadow1.BackgroundTransparency = 0.7
+    shadow1.BorderSizePixel = 0
+    shadow1.ZIndex = 1
+    shadow1.Parent = screenGui
+    
+    local shadow1Corner = Instance.new("UICorner")
+    shadow1Corner.CornerRadius = UDim.new(0, 30)
+    shadow1Corner.Parent = shadow1
+    
+    -- Medium shadow layer 2
+    local shadow2 = Instance.new("Frame")
+    shadow2.Size = UDim2.new(0, 435, 0, 255)
+    shadow2.Position = UDim2.new(0.5, -217, 0.5, -127)
+    shadow2.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    shadow2.BackgroundTransparency = 0.5
+    shadow2.BorderSizePixel = 0
+    shadow2.ZIndex = 2
+    shadow2.Parent = screenGui
+    
+    local shadow2Corner = Instance.new("UICorner")
+    shadow2Corner.CornerRadius = UDim.new(0, 28)
+    shadow2Corner.Parent = shadow2
+    
+    -- Light shadow layer 3 (closest to main)
+    local shadow3 = Instance.new("Frame")
+    shadow3.Size = UDim2.new(0, 430, 0, 250)
+    shadow3.Position = UDim2.new(0.5, -215, 0.5, -125)
+    shadow3.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    shadow3.BackgroundTransparency = 0.3
+    shadow3.BorderSizePixel = 0
+    shadow3.ZIndex = 3
+    shadow3.Parent = screenGui
+    
+    local shadow3Corner = Instance.new("UICorner")
+    shadow3Corner.CornerRadius = UDim.new(0, 26)
+    shadow3Corner.Parent = shadow3
+    
+    -- Main container - clay/soft plastic material
     local main = Instance.new("Frame")
     main.Size = UDim2.new(0, 420, 0, 240)
     main.Position = UDim2.new(0.5, -210, 0.5, -120)
-    main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    main.BackgroundColor3 = Color3.fromRGB(40, 42, 54)
     main.BorderSizePixel = 0
+    main.ZIndex = 4
     main.Parent = screenGui
     
     local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.CornerRadius = UDim.new(0, 24)
     mainCorner.Parent = main
     
-    local mainStroke = Instance.new("UIStroke")
-    mainStroke.Color = Color3.fromRGB(45, 45, 55)
-    mainStroke.Thickness = 1
-    mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    mainStroke.Parent = main
+    -- Inner glow/highlight (top light)
+    local innerGlow = Instance.new("Frame")
+    innerGlow.Size = UDim2.new(1, -6, 0.5, -3)
+    innerGlow.Position = UDim2.new(0, 3, 0, 3)
+    innerGlow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    innerGlow.BackgroundTransparency = 0.95
+    innerGlow.BorderSizePixel = 0
+    innerGlow.ZIndex = 5
+    innerGlow.Parent = main
+    
+    local innerGlowCorner = Instance.new("UICorner")
+    innerGlowCorner.CornerRadius = UDim.new(0, 22)
+    innerGlowCorner.Parent = innerGlow
+    
+    -- Subtle gradient on main frame
+    local mainGradient = Instance.new("UIGradient")
+    mainGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(48, 50, 64)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(38, 40, 52))
+    }
+    mainGradient.Rotation = 135
+    mainGradient.Parent = main
     
     -- Header
     local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 60)
+    header.Size = UDim2.new(1, -40, 0, 60)
+    header.Position = UDim2.new(0, 20, 0, 20)
     header.BackgroundTransparency = 1
+    header.ZIndex = 5
     header.Parent = main
     
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -40, 0, 24)
-    title.Position = UDim2.new(0, 20, 0, 12)
+    title.Size = UDim2.new(1, 0, 0, 28)
     title.BackgroundTransparency = 1
     title.Text = "PawZHub Key System"
-    title.TextColor3 = Color3.fromRGB(245, 245, 250)
-    title.TextSize = 18
-    title.Font = Enum.Font.Gotham
+    title.TextColor3 = Color3.fromRGB(230, 232, 245)
+    title.TextSize = 20
+    title.Font = Enum.Font.GothamBold
     title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 6
     title.Parent = header
     
+    -- Add text shadow for depth
+    local titleShadow = Instance.new("TextLabel")
+    titleShadow.Size = title.Size
+    titleShadow.Position = UDim2.new(0, 1, 0, 2)
+    titleShadow.BackgroundTransparency = 1
+    titleShadow.Text = title.Text
+    titleShadow.TextColor3 = Color3.fromRGB(0, 0, 0)
+    titleShadow.TextTransparency = 0.8
+    titleShadow.TextSize = title.TextSize
+    titleShadow.Font = title.Font
+    titleShadow.TextXAlignment = title.TextXAlignment
+    titleShadow.ZIndex = 5
+    titleShadow.Parent = header
+    
     local subtitle = Instance.new("TextLabel")
-    subtitle.Size = UDim2.new(1, -40, 0, 16)
-    subtitle.Position = UDim2.new(0, 20, 0, 38)
+    subtitle.Size = UDim2.new(1, 0, 0, 18)
+    subtitle.Position = UDim2.new(0, 0, 0, 32)
     subtitle.BackgroundTransparency = 1
     subtitle.Text = "Enter your license key to continue"
-    subtitle.TextColor3 = Color3.fromRGB(140, 140, 150)
-    subtitle.TextSize = 12
+    subtitle.TextColor3 = Color3.fromRGB(140, 145, 165)
+    subtitle.TextSize = 13
     subtitle.Font = Enum.Font.Gotham
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = header
+    subtitle.ZIndex = 6
+    subtitle.Parent = header
     
     -- Content
     local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -40, 1, -80)
-    content.Position = UDim2.new(0, 20, 0, 70)
+    content.Size = UDim2.new(1, -40, 1, -100)
+    content.Position = UDim2.new(0, 20, 0, 90)
     content.BackgroundTransparency = 1
+    content.ZIndex = 5
     content.Parent = main
     
-    -- Input field
+    -- Input field - Clay inset effect
+    local inputOuter = Instance.new("Frame")
+    inputOuter.Size = UDim2.new(1, 0, 0, 50)
+    inputOuter.Position = UDim2.new(0, 0, 0, 0)
+    inputOuter.BackgroundColor3 = Color3.fromRGB(28, 30, 40)
+    inputOuter.BorderSizePixel = 0
+    inputOuter.ZIndex = 5
+    inputOuter.Parent = content
+    
+    local inputOuterCorner = Instance.new("UICorner")
+    inputOuterCorner.CornerRadius = UDim.new(0, 16)
+    inputOuterCorner.Parent = inputOuter
+    
+    -- Inner shadow effect (top dark)
+    local inputInnerShadow = Instance.new("Frame")
+    inputInnerShadow.Size = UDim2.new(1, -4, 1, -4)
+    inputInnerShadow.Position = UDim2.new(0, 2, 0, 2)
+    inputInnerShadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    inputInnerShadow.BackgroundTransparency = 0.7
+    inputInnerShadow.BorderSizePixel = 0
+    inputInnerShadow.ZIndex = 6
+    inputInnerShadow.Parent = inputOuter
+    
+    local inputInnerShadowCorner = Instance.new("UICorner")
+    inputInnerShadowCorner.CornerRadius = UDim.new(0, 14)
+    inputInnerShadowCorner.Parent = inputInnerShadow
+    
+    -- Input field actual
     local inputFrame = Instance.new("Frame")
-    inputFrame.Size = UDim2.new(1, 0, 0, 44)
-    inputFrame.Position = UDim2.new(0, 0, 0, 10)
-    inputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    inputFrame.Size = UDim2.new(1, -8, 1, -8)
+    inputFrame.Position = UDim2.new(0, 4, 0, 4)
+    inputFrame.BackgroundColor3 = Color3.fromRGB(35, 37, 48)
     inputFrame.BorderSizePixel = 0
-    inputFrame.Parent = content
+    inputFrame.ZIndex = 7
+    inputFrame.Parent = inputOuter
     
     local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.CornerRadius = UDim.new(0, 13)
     inputCorner.Parent = inputFrame
-    
-    local inputStroke = Instance.new("UIStroke")
-    inputStroke.Color = Color3.fromRGB(50, 50, 60)
-    inputStroke.Thickness = 1
-    inputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    inputStroke.Parent = inputFrame
     
     local input = Instance.new("TextBox")
     input.Size = UDim2.new(1, -20, 1, 0)
     input.Position = UDim2.new(0, 10, 0, 0)
     input.BackgroundTransparency = 1
     input.Text = ""
-    input.PlaceholderText = "Enter key here..."
-    input.TextColor3 = Color3.fromRGB(240, 240, 245)
-    input.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    input.PlaceholderText = "Enter your key here..."
+    input.TextColor3 = Color3.fromRGB(220, 225, 240)
+    input.PlaceholderColor3 = Color3.fromRGB(100, 105, 120)
     input.TextSize = 14
     input.Font = Enum.Font.Gotham
     input.ClearTextOnFocus = false
+    input.ZIndex = 8
     input.Parent = inputFrame
     
-    -- Focus animation
+    -- Focus glow animation
     input.Focused:Connect(function()
-        TweenService:Create(inputStroke, TweenInfo.new(0.2), {
-            Color = Color3.fromRGB(88, 101, 242),
-            Thickness = 2
+        TweenService:Create(inputOuter, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(55, 60, 85)
+        }):Play()
+        TweenService:Create(inputFrame, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(45, 50, 70)
         }):Play()
     end)
     
     input.FocusLost:Connect(function()
-        TweenService:Create(inputStroke, TweenInfo.new(0.2), {
-            Color = Color3.fromRGB(50, 50, 60),
-            Thickness = 1
+        TweenService:Create(inputOuter, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(28, 30, 40)
+        }):Play()
+        TweenService:Create(inputFrame, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(35, 37, 48)
         }):Play()
     end)
     
-    -- Buttons
-    local submitBtn = Instance.new("TextButton")
-    submitBtn.Size = UDim2.new(0.48, 0, 0, 40)
-    submitBtn.Position = UDim2.new(0, 0, 0, 70)
-    submitBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-    submitBtn.BorderSizePixel = 0
-    submitBtn.Text = "Submit"
-    submitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    submitBtn.TextSize = 14
-    submitBtn.Font = Enum.Font.GothamMedium
-    submitBtn.AutoButtonColor = false
-    submitBtn.Parent = content
+    -- Buttons with clay/raised effect
+    local function createClayButton(text, position, isPrimary)
+        -- Outer shadow for button
+        local btnShadow = Instance.new("Frame")
+        btnShadow.Size = UDim2.new(0.48, 0, 0, 46)
+        btnShadow.Position = position + UDim2.new(0, 0, 0, 4)
+        btnShadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        btnShadow.BackgroundTransparency = 0.6
+        btnShadow.BorderSizePixel = 0
+        btnShadow.ZIndex = 5
+        btnShadow.Parent = content
+        
+        local btnShadowCorner = Instance.new("UICorner")
+        btnShadowCorner.CornerRadius = UDim.new(0, 16)
+        btnShadowCorner.Parent = btnShadow
+        
+        -- Button main
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.48, 0, 0, 46)
+        btn.Position = position
+        btn.BackgroundColor3 = isPrimary and Color3.fromRGB(88, 101, 242) or Color3.fromRGB(50, 52, 65)
+        btn.BorderSizePixel = 0
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextSize = 14
+        btn.Font = Enum.Font.GothamBold
+        btn.AutoButtonColor = false
+        btn.ZIndex = 6
+        btn.Parent = content
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 16)
+        btnCorner.Parent = btn
+        
+        -- Top highlight for 3D effect
+        local btnHighlight = Instance.new("Frame")
+        btnHighlight.Size = UDim2.new(1, -8, 0.4, 0)
+        btnHighlight.Position = UDim2.new(0, 4, 0, 4)
+        btnHighlight.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        btnHighlight.BackgroundTransparency = 0.9
+        btnHighlight.BorderSizePixel = 0
+        btnHighlight.ZIndex = 7
+        btnHighlight.Parent = btn
+        
+        local btnHighlightCorner = Instance.new("UICorner")
+        btnHighlightCorner.CornerRadius = UDim.new(0, 13)
+        btnHighlightCorner.Parent = btnHighlight
+        
+        -- Hover animation - "press down" effect
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.15), {
+                Position = position + UDim2.new(0, 0, 0, 2)
+            }):Play()
+            TweenService:Create(btnShadow, TweenInfo.new(0.15), {
+                BackgroundTransparency = 0.75,
+                Position = position + UDim2.new(0, 0, 0, 5)
+            }):Play()
+            if isPrimary then
+                TweenService:Create(btn, TweenInfo.new(0.15), {
+                    BackgroundColor3 = Color3.fromRGB(108, 121, 255)
+                }):Play()
+            else
+                TweenService:Create(btn, TweenInfo.new(0.15), {
+                    BackgroundColor3 = Color3.fromRGB(60, 62, 75)
+                }):Play()
+            end
+        end)
+        
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.15), {
+                Position = position
+            }):Play()
+            TweenService:Create(btnShadow, TweenInfo.new(0.15), {
+                BackgroundTransparency = 0.6,
+                Position = position + UDim2.new(0, 0, 0, 4)
+            }):Play()
+            if isPrimary then
+                TweenService:Create(btn, TweenInfo.new(0.15), {
+                    BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+                }):Play()
+            else
+                TweenService:Create(btn, TweenInfo.new(0.15), {
+                    BackgroundColor3 = Color3.fromRGB(50, 52, 65)
+                }):Play()
+            end
+        end)
+        
+        return btn, btnShadow
+    end
     
-    local submitCorner = Instance.new("UICorner")
-    submitCorner.CornerRadius = UDim.new(0, 8)
-    submitCorner.Parent = submitBtn
-    
-    local getKeyBtn = Instance.new("TextButton")
-    getKeyBtn.Size = UDim2.new(0.48, 0, 0, 40)
-    getKeyBtn.Position = UDim2.new(0.52, 0, 0, 70)
-    getKeyBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    getKeyBtn.BorderSizePixel = 0
-    getKeyBtn.Text = "Get Key"
-    getKeyBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
-    getKeyBtn.TextSize = 14
-    getKeyBtn.Font = Enum.Font.GothamMedium
-    getKeyBtn.AutoButtonColor = false
-    getKeyBtn.Parent = content
-    
-    local getKeyCorner = Instance.new("UICorner")
-    getKeyCorner.CornerRadius = UDim.new(0, 8)
-    getKeyCorner.Parent = getKeyBtn
-    
-    local getKeyStroke = Instance.new("UIStroke")
-    getKeyStroke.Color = Color3.fromRGB(55, 55, 65)
-    getKeyStroke.Thickness = 1
-    getKeyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    getKeyStroke.Parent = getKeyBtn
+    local submitBtn = createClayButton("Submit", UDim2.new(0, 0, 0, 65), true)
+    local getKeyBtn = createClayButton("Get Key", UDim2.new(0.52, 0, 0, 65), false)
     
     -- Status
     local status = Instance.new("TextLabel")
@@ -273,35 +439,11 @@ local function createKeyUI(callback)
     status.BackgroundTransparency = 1
     status.Text = ""
     status.TextColor3 = Color3.fromRGB(255, 100, 100)
-    status.TextSize = 11
+    status.TextSize = 12
     status.Font = Enum.Font.Gotham
     status.TextTransparency = 1
+    status.ZIndex = 6
     status.Parent = content
-    
-    -- Hover effects
-    submitBtn.MouseEnter:Connect(function()
-        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(108, 121, 255)
-        }):Play()
-    end)
-    
-    submitBtn.MouseLeave:Connect(function()
-        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(88, 101, 242)
-        }):Play()
-    end)
-    
-    getKeyBtn.MouseEnter:Connect(function()
-        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-        }):Play()
-    end)
-    
-    getKeyBtn.MouseLeave:Connect(function()
-        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-        }):Play()
-    end)
     
     -- Get Key action
     getKeyBtn.MouseButton1Click:Connect(function()
@@ -319,7 +461,7 @@ local function createKeyUI(callback)
         wait(2)
         getKeyBtn.Text = "Get Key"
         TweenService:Create(getKeyBtn, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+            BackgroundColor3 = Color3.fromRGB(50, 52, 65)
         }):Play()
         TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
     end)
@@ -333,14 +475,14 @@ local function createKeyUI(callback)
             status.TextColor3 = Color3.fromRGB(255, 120, 120)
             TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
             
-            -- Shake
+            -- Shake animation
             for i = 1, 2 do
-                inputFrame.Position = UDim2.new(0, 5, 0, 10)
-                wait(0.05)
-                inputFrame.Position = UDim2.new(0, -5, 0, 10)
-                wait(0.05)
+                inputOuter.Position = UDim2.new(0, 5, 0, 0)
+                wait(0.04)
+                inputOuter.Position = UDim2.new(0, -5, 0, 0)
+                wait(0.04)
             end
-            inputFrame.Position = UDim2.new(0, 0, 0, 10)
+            inputOuter.Position = UDim2.new(0, 0, 0, 0)
             return
         end
         
@@ -369,14 +511,24 @@ local function createKeyUI(callback)
                 
                 local session = createSession(key)
                 
-                TweenService:Create(main, TweenInfo.new(0.25), {
+                -- Fade out all layers
+                TweenService:Create(main, TweenInfo.new(0.3), {
                     BackgroundTransparency = 1
                 }):Play()
-                TweenService:Create(overlay, TweenInfo.new(0.25), {
+                TweenService:Create(shadow1, TweenInfo.new(0.3), {
+                    BackgroundTransparency = 1
+                }):Play()
+                TweenService:Create(shadow2, TweenInfo.new(0.3), {
+                    BackgroundTransparency = 1
+                }):Play()
+                TweenService:Create(shadow3, TweenInfo.new(0.3), {
+                    BackgroundTransparency = 1
+                }):Play()
+                TweenService:Create(overlay, TweenInfo.new(0.3), {
                     BackgroundTransparency = 1
                 }):Play()
                 
-                wait(0.25)
+                wait(0.3)
                 screenGui:Destroy()
                 
                 if callback then
@@ -391,14 +543,23 @@ local function createKeyUI(callback)
                 status.Text = message or "Invalid key"
                 status.TextColor3 = Color3.fromRGB(255, 100, 100)
                 
-                -- Shake
+                -- Shake main frame
                 for i = 1, 2 do
                     main.Position = UDim2.new(0.5, -210 + 8, 0.5, -120)
+                    shadow1.Position = UDim2.new(0.5, -220 + 8, 0.5, -130)
+                    shadow2.Position = UDim2.new(0.5, -217 + 8, 0.5, -127)
+                    shadow3.Position = UDim2.new(0.5, -215 + 8, 0.5, -125)
                     wait(0.04)
                     main.Position = UDim2.new(0.5, -210 - 8, 0.5, -120)
+                    shadow1.Position = UDim2.new(0.5, -220 - 8, 0.5, -130)
+                    shadow2.Position = UDim2.new(0.5, -217 - 8, 0.5, -127)
+                    shadow3.Position = UDim2.new(0.5, -215 - 8, 0.5, -125)
                     wait(0.04)
                 end
                 main.Position = UDim2.new(0.5, -210, 0.5, -120)
+                shadow1.Position = UDim2.new(0.5, -220, 0.5, -130)
+                shadow2.Position = UDim2.new(0.5, -217, 0.5, -127)
+                shadow3.Position = UDim2.new(0.5, -215, 0.5, -125)
             end
         end)
     end)
@@ -426,22 +587,54 @@ local function createKeyUI(callback)
                 startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y
             )
+            -- Move shadows along
+            shadow1.Position = main.Position + UDim2.new(0, -10, 0, -10)
+            shadow2.Position = main.Position + UDim2.new(0, -7, 0, -7)
+            shadow3.Position = main.Position + UDim2.new(0, -5, 0, -5)
         end
     end)
     
-    -- Entry animation
+    -- Entry animation with 3D depth
     screenGui.Parent = playerGui
     
-    overlay.BackgroundTransparency = 1
-    TweenService:Create(overlay, TweenInfo.new(0.25), {
-        BackgroundTransparency = 0.4
+    -- Start all invisible
+    main.BackgroundTransparency = 1
+    shadow1.BackgroundTransparency = 1
+    shadow2.BackgroundTransparency = 1
+    shadow3.BackgroundTransparency = 1
+    
+    -- Fade in background
+    TweenService:Create(overlay, TweenInfo.new(0.4), {
+        BackgroundTransparency = 0
     }):Play()
     
-    main.Size = UDim2.new(0, 0, 0, 0)
-    main.Position = UDim2.new(0.5, 0, 0.5, 0)
+    wait(0.1)
     
-    TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
-        Size = UDim2.new(0, 420, 0, 240),
+    -- Animate shadows appearing in sequence (depth effect)
+    TweenService:Create(shadow1, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.7,
+        Position = UDim2.new(0.5, -220, 0.5, -130)
+    }):Play()
+    
+    wait(0.05)
+    
+    TweenService:Create(shadow2, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.5,
+        Position = UDim2.new(0.5, -217, 0.5, -127)
+    }):Play()
+    
+    wait(0.05)
+    
+    TweenService:Create(shadow3, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0.3,
+        Position = UDim2.new(0.5, -215, 0.5, -125)
+    }):Play()
+    
+    wait(0.05)
+    
+    -- Main frame pop-in with bounce
+    TweenService:Create(main, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        BackgroundTransparency = 0,
         Position = UDim2.new(0.5, -210, 0.5, -120)
     }):Play()
 end
