@@ -70,126 +70,20 @@ print("✓ Session Token: " .. sessionOrError.token:sub(1, 8) .. "...")
 print("✓ User: " .. sessionOrError.username)
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "🐾 PawZHub BF",
-    Text = "Welcome " .. sessionOrError.username .. "!",
-    Duration = 5
+    Title = "PawZHub",
+    Text = "Script loaded successfully",
+    Duration = 3
 })
 
 -- ============================================
 -- YOUR BLOX FRUITS SCRIPT CODE HERE
 -- ============================================
 
--- Example: Simple UI notification
-local function createWelcomeUI()
-    local Players = game:GetService("Players")
-    local player = Players.LocalPlayer
-    local playerGui = player:WaitForChild("PlayerGui")
-    
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "PawZHubBF"
-    screenGui.ResetOnSpawn = false
-    
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 300, 0, 150)
-    frame.Position = UDim2.new(0.5, -150, 0.5, -75)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    frame.BorderSizePixel = 0
-    frame.Parent = screenGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = frame
-    
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -20, 0, 40)
-    title.Position = UDim2.new(0, 10, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Text = "🍇 PawZHub - Blox Fruits"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 18
-    title.Font = Enum.Font.GothamBold
-    title.Parent = frame
-    
-    local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -20, 0, 60)
-    status.Position = UDim2.new(0, 10, 0, 55)
-    status.BackgroundTransparency = 1
-    status.Text = "✓ Script loaded successfully!\n✓ Authentication verified\n✓ Ready to use"
-    status.TextColor3 = Color3.fromRGB(100, 255, 100)
-    status.TextSize = 14
-    status.Font = Enum.Font.Gotham
-    status.TextYAlignment = Enum.TextYAlignment.Top
-    status.Parent = frame
-    
-    local closeButton = Instance.new("TextButton")
-    closeButton.Size = UDim2.new(0, 100, 0, 30)
-    closeButton.Position = UDim2.new(0.5, -50, 1, -40)
-    closeButton.BackgroundColor3 = Color3.fromRGB(70, 130, 250)
-    closeButton.BorderSizePixel = 0
-    closeButton.Text = "Close"
-    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeButton.TextSize = 14
-    closeButton.Font = Enum.Font.GothamBold
-    closeButton.Parent = frame
-    
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 8)
-    buttonCorner.Parent = closeButton
-    
-    closeButton.MouseButton1Click:Connect(function()
-        screenGui:Destroy()
-    end)
-    
-    screenGui.Parent = playerGui
-    
-    -- Auto close after 5 seconds
-    task.delay(5, function()
-        if screenGui.Parent then
-            screenGui:Destroy()
-        end
-    end)
-end
-
--- ============================================
--- MAIN SCRIPT EXECUTION
--- ============================================
-
--- Create welcome UI
-createWelcomeUI()
-
--- Add your Blox Fruits features here
--- Example features you might add:
--- - Auto Farm
--- - Auto Quest
--- - Teleports
--- - ESP
--- - etc.
-
 print("🐾 PawZHub Blox Fruits script loaded successfully!")
-
--- Example: Print session info (for debugging)
-if game:GetService("Players").LocalPlayer.Name == sessionOrError.username then
-    print("Session valid for: " .. math.floor((3600 - (os.time() - sessionOrError.timestamp)) / 60) .. " minutes")
-end
 
 --[[
     ADD YOUR BLOX FRUITS SCRIPT FEATURES BELOW THIS LINE
     
     The script will only reach this point if authentication is successful.
     You can safely add your features here knowing the user has a valid key.
-    
-    Example structure:
-    
-    local BFScript = {}
-    
-    function BFScript.autoFarm()
-        -- Your auto farm code
-    end
-    
-    function BFScript.teleport(location)
-        -- Your teleport code
-    end
-    
-    -- Initialize your features
-    BFScript.autoFarm()
 ]]

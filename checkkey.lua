@@ -107,7 +107,7 @@ function CheckKeySystem.verifyKeyFallback(key)
     return false, "Invalid key"
 end
 
--- Create UI for key input - Clean and minimal design
+-- Create UI for key input - Modern clean design
 local function createKeyUI(callback)
     local Players = game:GetService("Players")
     local TweenService = game:GetService("TweenService")
@@ -120,352 +120,296 @@ local function createKeyUI(callback)
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- Dark blur background
-    local blurBg = Instance.new("Frame")
-    blurBg.Size = UDim2.new(1, 0, 1, 0)
-    blurBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    blurBg.BackgroundTransparency = 0.3
-    blurBg.BorderSizePixel = 0
-    blurBg.Parent = screenGui
+    -- Background overlay
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.new(1, 0, 1, 0)
+    overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    overlay.BackgroundTransparency = 0.4
+    overlay.BorderSizePixel = 0
+    overlay.Parent = screenGui
     
-    -- Main Frame
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 450, 0, 280)
-    mainFrame.Position = UDim2.new(0.5, -225, 0.5, -140)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Parent = screenGui
+    -- Main container
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0, 420, 0, 240)
+    main.Position = UDim2.new(0.5, -210, 0.5, -120)
+    main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    main.BorderSizePixel = 0
+    main.Parent = screenGui
     
     local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 16)
-    mainCorner.Parent = mainFrame
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    mainCorner.Parent = main
     
-    -- Subtle border
-    local border = Instance.new("UIStroke")
-    border.Color = Color3.fromRGB(60, 60, 70)
-    border.Thickness = 1
-    border.Transparency = 0.5
-    border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    border.Parent = mainFrame
+    local mainStroke = Instance.new("UIStroke")
+    mainStroke.Color = Color3.fromRGB(45, 45, 55)
+    mainStroke.Thickness = 1
+    mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    mainStroke.Parent = main
     
-    -- Header section
+    -- Header
     local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 80)
+    header.Size = UDim2.new(1, 0, 0, 60)
     header.BackgroundTransparency = 1
-    header.Parent = mainFrame
+    header.Parent = main
     
-    -- Logo container
-    local logoContainer = Instance.new("Frame")
-    logoContainer.Size = UDim2.new(0, 50, 0, 50)
-    logoContainer.Position = UDim2.new(0, 30, 0, 15)
-    logoContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    logoContainer.BorderSizePixel = 0
-    logoContainer.Parent = header
-    
-    local logoCorner = Instance.new("UICorner")
-    logoCorner.CornerRadius = UDim.new(0, 12)
-    logoCorner.Parent = logoContainer
-    
-    local logoStroke = Instance.new("UIStroke")
-    logoStroke.Color = Color3.fromRGB(255, 100, 80)
-    logoStroke.Thickness = 2
-    logoStroke.Transparency = 0.3
-    logoStroke.Parent = logoContainer
-    
-    local logo = Instance.new("TextLabel")
-    logo.Size = UDim2.new(1, 0, 1, 0)
-    logo.BackgroundTransparency = 1
-    logo.Text = "🐾"
-    logo.TextSize = 28
-    logo.Parent = logoContainer
-    
-    -- Title
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -110, 0, 28)
-    title.Position = UDim2.new(0, 95, 0, 18)
+    title.Size = UDim2.new(1, -40, 0, 24)
+    title.Position = UDim2.new(0, 20, 0, 12)
     title.BackgroundTransparency = 1
     title.Text = "PawZHub Key System"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 20
-    title.Font = Enum.Font.GothamBold
+    title.TextColor3 = Color3.fromRGB(245, 245, 250)
+    title.TextSize = 18
+    title.Font = Enum.Font.Gotham
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = header
     
-    -- Subtitle
     local subtitle = Instance.new("TextLabel")
-    subtitle.Size = UDim2.new(1, -110, 0, 18)
-    subtitle.Position = UDim2.new(0, 95, 0, 47)
+    subtitle.Size = UDim2.new(1, -40, 0, 16)
+    subtitle.Position = UDim2.new(0, 20, 0, 38)
     subtitle.BackgroundTransparency = 1
-    subtitle.Text = "Secure Authentication System"
-    subtitle.TextColor3 = Color3.fromRGB(150, 150, 160)
+    subtitle.Text = "Enter your license key to continue"
+    subtitle.TextColor3 = Color3.fromRGB(140, 140, 150)
     subtitle.TextSize = 12
     subtitle.Font = Enum.Font.Gotham
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    subtitle.Parent = header
+    title.Parent = header
     
-    -- Content area
+    -- Content
     local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -60, 1, -100)
-    content.Position = UDim2.new(0, 30, 0, 90)
+    content.Size = UDim2.new(1, -40, 1, -80)
+    content.Position = UDim2.new(0, 20, 0, 70)
     content.BackgroundTransparency = 1
-    content.Parent = mainFrame
+    content.Parent = main
     
-    -- Input label
-    local inputLabel = Instance.new("TextLabel")
-    inputLabel.Size = UDim2.new(1, 0, 0, 20)
-    inputLabel.BackgroundTransparency = 1
-    inputLabel.Text = "🔑 Enter Your License Key"
-    inputLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-    inputLabel.TextSize = 13
-    inputLabel.Font = Enum.Font.GothamMedium
-    inputLabel.TextXAlignment = Enum.TextXAlignment.Left
-    inputLabel.Parent = content
-    
-    -- Input container
-    local inputBox = Instance.new("Frame")
-    inputBox.Size = UDim2.new(1, 0, 0, 48)
-    inputBox.Position = UDim2.new(0, 0, 0, 30)
-    inputBox.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    inputBox.BorderSizePixel = 0
-    inputBox.Parent = content
+    -- Input field
+    local inputFrame = Instance.new("Frame")
+    inputFrame.Size = UDim2.new(1, 0, 0, 44)
+    inputFrame.Position = UDim2.new(0, 0, 0, 10)
+    inputFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 36)
+    inputFrame.BorderSizePixel = 0
+    inputFrame.Parent = content
     
     local inputCorner = Instance.new("UICorner")
-    inputCorner.CornerRadius = UDim.new(0, 10)
-    inputCorner.Parent = inputBox
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputFrame
     
     local inputStroke = Instance.new("UIStroke")
     inputStroke.Color = Color3.fromRGB(50, 50, 60)
     inputStroke.Thickness = 1
-    inputStroke.Transparency = 0.5
-    inputStroke.Parent = inputBox
+    inputStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    inputStroke.Parent = inputFrame
     
-    -- Text input
-    local keyInput = Instance.new("TextBox")
-    keyInput.Size = UDim2.new(1, -20, 1, 0)
-    keyInput.Position = UDim2.new(0, 10, 0, 0)
-    keyInput.BackgroundTransparency = 1
-    keyInput.Text = ""
-    keyInput.PlaceholderText = "PAWZ-XXXX-XXXX-XXXX"
-    keyInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    keyInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
-    keyInput.TextSize = 15
-    keyInput.Font = Enum.Font.GothamMedium
-    keyInput.ClearTextOnFocus = false
-    keyInput.Parent = inputBox
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(1, -20, 1, 0)
+    input.Position = UDim2.new(0, 10, 0, 0)
+    input.BackgroundTransparency = 1
+    input.Text = ""
+    input.PlaceholderText = "Enter key here..."
+    input.TextColor3 = Color3.fromRGB(240, 240, 245)
+    input.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    input.TextSize = 14
+    input.Font = Enum.Font.Gotham
+    input.ClearTextOnFocus = false
+    input.Parent = inputFrame
     
-    -- Input focus effect
-    keyInput.Focused:Connect(function()
+    -- Focus animation
+    input.Focused:Connect(function()
         TweenService:Create(inputStroke, TweenInfo.new(0.2), {
-            Color = Color3.fromRGB(255, 100, 80),
-            Transparency = 0.2,
+            Color = Color3.fromRGB(88, 101, 242),
             Thickness = 2
         }):Play()
     end)
     
-    keyInput.FocusLost:Connect(function()
+    input.FocusLost:Connect(function()
         TweenService:Create(inputStroke, TweenInfo.new(0.2), {
             Color = Color3.fromRGB(50, 50, 60),
-            Transparency = 0.5,
             Thickness = 1
         }):Play()
     end)
     
     -- Buttons
-    local btnSubmit = Instance.new("TextButton")
-    btnSubmit.Size = UDim2.new(0.48, 0, 0, 44)
-    btnSubmit.Position = UDim2.new(0, 0, 0, 90)
-    btnSubmit.BackgroundColor3 = Color3.fromRGB(70, 120, 255)
-    btnSubmit.BorderSizePixel = 0
-    btnSubmit.Text = "✓ Submit Key"
-    btnSubmit.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btnSubmit.TextSize = 14
-    btnSubmit.Font = Enum.Font.GothamBold
-    btnSubmit.AutoButtonColor = false
-    btnSubmit.Parent = content
+    local submitBtn = Instance.new("TextButton")
+    submitBtn.Size = UDim2.new(0.48, 0, 0, 40)
+    submitBtn.Position = UDim2.new(0, 0, 0, 70)
+    submitBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+    submitBtn.BorderSizePixel = 0
+    submitBtn.Text = "Submit"
+    submitBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    submitBtn.TextSize = 14
+    submitBtn.Font = Enum.Font.GothamMedium
+    submitBtn.AutoButtonColor = false
+    submitBtn.Parent = content
     
-    local btnSubmitCorner = Instance.new("UICorner")
-    btnSubmitCorner.CornerRadius = UDim.new(0, 10)
-    btnSubmitCorner.Parent = btnSubmit
+    local submitCorner = Instance.new("UICorner")
+    submitCorner.CornerRadius = UDim.new(0, 8)
+    submitCorner.Parent = submitBtn
     
-    local btnGetKey = Instance.new("TextButton")
-    btnGetKey.Size = UDim2.new(0.48, 0, 0, 44)
-    btnGetKey.Position = UDim2.new(0.52, 0, 0, 90)
-    btnGetKey.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-    btnGetKey.BorderSizePixel = 0
-    btnGetKey.Text = "🔗 Get Key"
-    btnGetKey.TextColor3 = Color3.fromRGB(220, 220, 230)
-    btnGetKey.TextSize = 14
-    btnGetKey.Font = Enum.Font.GothamBold
-    btnGetKey.AutoButtonColor = false
-    btnGetKey.Parent = content
+    local getKeyBtn = Instance.new("TextButton")
+    getKeyBtn.Size = UDim2.new(0.48, 0, 0, 40)
+    getKeyBtn.Position = UDim2.new(0.52, 0, 0, 70)
+    getKeyBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    getKeyBtn.BorderSizePixel = 0
+    getKeyBtn.Text = "Get Key"
+    getKeyBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+    getKeyBtn.TextSize = 14
+    getKeyBtn.Font = Enum.Font.GothamMedium
+    getKeyBtn.AutoButtonColor = false
+    getKeyBtn.Parent = content
     
-    local btnGetKeyCorner = Instance.new("UICorner")
-    btnGetKeyCorner.CornerRadius = UDim.new(0, 10)
-    btnGetKeyCorner.Parent = btnGetKey
+    local getKeyCorner = Instance.new("UICorner")
+    getKeyCorner.CornerRadius = UDim.new(0, 8)
+    getKeyCorner.Parent = getKeyBtn
     
-    local btnGetKeyStroke = Instance.new("UIStroke")
-    btnGetKeyStroke.Color = Color3.fromRGB(70, 70, 80)
-    btnGetKeyStroke.Thickness = 1
-    btnGetKeyStroke.Transparency = 0.5
-    btnGetKeyStroke.Parent = btnGetKey
+    local getKeyStroke = Instance.new("UIStroke")
+    getKeyStroke.Color = Color3.fromRGB(55, 55, 65)
+    getKeyStroke.Thickness = 1
+    getKeyStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    getKeyStroke.Parent = getKeyBtn
     
-    -- Status label
+    -- Status
     local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, 0, 0, 25)
-    status.Position = UDim2.new(0, 0, 0, 145)
+    status.Size = UDim2.new(1, 0, 0, 20)
+    status.Position = UDim2.new(0, 0, 0, 125)
     status.BackgroundTransparency = 1
     status.Text = ""
     status.TextColor3 = Color3.fromRGB(255, 100, 100)
-    status.TextSize = 12
-    status.Font = Enum.Font.GothamMedium
+    status.TextSize = 11
+    status.Font = Enum.Font.Gotham
     status.TextTransparency = 1
     status.Parent = content
     
     -- Hover effects
-    btnSubmit.MouseEnter:Connect(function()
-        TweenService:Create(btnSubmit, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(90, 140, 255)
+    submitBtn.MouseEnter:Connect(function()
+        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(108, 121, 255)
         }):Play()
     end)
     
-    btnSubmit.MouseLeave:Connect(function()
-        TweenService:Create(btnSubmit, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(70, 120, 255)
+    submitBtn.MouseLeave:Connect(function()
+        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(88, 101, 242)
         }):Play()
     end)
     
-    btnGetKey.MouseEnter:Connect(function()
-        TweenService:Create(btnGetKey, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    getKeyBtn.MouseEnter:Connect(function()
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(45, 45, 55)
         }):Play()
     end)
     
-    btnGetKey.MouseLeave:Connect(function()
-        TweenService:Create(btnGetKey, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    getKeyBtn.MouseLeave:Connect(function()
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(35, 35, 45)
         }):Play()
     end)
     
     -- Get Key action
-    btnGetKey.MouseButton1Click:Connect(function()
-        local keyUrl = "https://your-website.com/getkey"
-        setclipboard(keyUrl)
+    getKeyBtn.MouseButton1Click:Connect(function()
+        setclipboard("https://your-website.com/getkey")
         
-        btnGetKey.Text = "✓ Copied!"
-        TweenService:Create(btnGetKey, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(50, 180, 100)
+        getKeyBtn.Text = "Copied"
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(35, 160, 90)
         }):Play()
         
-        status.Text = "✓ Key URL copied!"
-        status.TextColor3 = Color3.fromRGB(100, 255, 150)
+        status.Text = "Key URL copied to clipboard"
+        status.TextColor3 = Color3.fromRGB(100, 220, 150)
         TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
         
         wait(2)
-        
-        btnGetKey.Text = "🔗 Get Key"
-        TweenService:Create(btnGetKey, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        getKeyBtn.Text = "Get Key"
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(35, 35, 45)
         }):Play()
         TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
     end)
     
     -- Submit action
-    btnSubmit.MouseButton1Click:Connect(function()
-        local key = keyInput.Text
+    submitBtn.MouseButton1Click:Connect(function()
+        local key = input.Text
         
         if key == "" or #key < 5 then
-            status.Text = "⚠️ Please enter a valid key"
-            status.TextColor3 = Color3.fromRGB(255, 150, 100)
+            status.Text = "Please enter a valid key"
+            status.TextColor3 = Color3.fromRGB(255, 120, 120)
             TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
             
             -- Shake
-            local origPos = inputBox.Position
             for i = 1, 2 do
-                inputBox.Position = origPos + UDim2.new(0, 5, 0, 0)
+                inputFrame.Position = UDim2.new(0, 5, 0, 10)
                 wait(0.05)
-                inputBox.Position = origPos + UDim2.new(0, -5, 0, 0)
+                inputFrame.Position = UDim2.new(0, -5, 0, 10)
                 wait(0.05)
             end
-            inputBox.Position = origPos
+            inputFrame.Position = UDim2.new(0, 0, 0, 10)
             return
         end
         
-        btnSubmit.Text = "⏳ Verifying..."
-        TweenService:Create(btnSubmit, TweenInfo.new(0.2), {
-            BackgroundColor3 = Color3.fromRGB(80, 80, 90)
+        submitBtn.Text = "Verifying..."
+        TweenService:Create(submitBtn, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(70, 70, 80)
         }):Play()
         
-        status.Text = "Verifying key..."
-        status.TextColor3 = Color3.fromRGB(200, 200, 210)
+        status.Text = "Checking key..."
+        status.TextColor3 = Color3.fromRGB(180, 180, 190)
         TweenService:Create(status, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
         
         task.spawn(function()
             local valid, message = verifyKeyRemote(key)
             
             if valid then
-                btnSubmit.Text = "✓ Success!"
-                TweenService:Create(btnSubmit, TweenInfo.new(0.2), {
-                    BackgroundColor3 = Color3.fromRGB(50, 180, 100)
+                submitBtn.Text = "Success"
+                TweenService:Create(submitBtn, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Color3.fromRGB(35, 160, 90)
                 }):Play()
                 
-                status.Text = "✓ Access granted!"
-                status.TextColor3 = Color3.fromRGB(100, 255, 150)
+                status.Text = "Access granted"
+                status.TextColor3 = Color3.fromRGB(100, 220, 150)
                 
-                wait(1)
+                wait(0.8)
                 
                 local session = createSession(key)
                 
-                -- Fade out
-                TweenService:Create(mainFrame, TweenInfo.new(0.3), {
+                TweenService:Create(main, TweenInfo.new(0.25), {
                     BackgroundTransparency = 1
                 }):Play()
-                TweenService:Create(blurBg, TweenInfo.new(0.3), {
+                TweenService:Create(overlay, TweenInfo.new(0.25), {
                     BackgroundTransparency = 1
                 }):Play()
                 
-                wait(0.3)
+                wait(0.25)
                 screenGui:Destroy()
                 
                 if callback then
                     callback(true, session)
                 end
             else
-                btnSubmit.Text = "✓ Submit Key"
-                TweenService:Create(btnSubmit, TweenInfo.new(0.2), {
-                    BackgroundColor3 = Color3.fromRGB(70, 120, 255)
+                submitBtn.Text = "Submit"
+                TweenService:Create(submitBtn, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Color3.fromRGB(88, 101, 242)
                 }):Play()
                 
-                status.Text = "✗ " .. (message or "Invalid key")
+                status.Text = message or "Invalid key"
                 status.TextColor3 = Color3.fromRGB(255, 100, 100)
                 
-                -- Shake frame
-                local origPos = mainFrame.Position
+                -- Shake
                 for i = 1, 2 do
-                    TweenService:Create(mainFrame, TweenInfo.new(0.05), {
-                        Position = origPos + UDim2.new(0, 8, 0, 0)
-                    }):Play()
-                    wait(0.05)
-                    TweenService:Create(mainFrame, TweenInfo.new(0.05), {
-                        Position = origPos + UDim2.new(0, -8, 0, 0)
-                    }):Play()
-                    wait(0.05)
+                    main.Position = UDim2.new(0.5, -210 + 8, 0.5, -120)
+                    wait(0.04)
+                    main.Position = UDim2.new(0.5, -210 - 8, 0.5, -120)
+                    wait(0.04)
                 end
-                TweenService:Create(mainFrame, TweenInfo.new(0.05), {
-                    Position = origPos
-                }):Play()
+                main.Position = UDim2.new(0.5, -210, 0.5, -120)
             end
         end)
     end)
     
     -- Draggable
-    local dragging, dragInput, startPos
-    
+    local dragging, dragStart, startPos
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
-            startPos = mainFrame.Position
-            dragInput = input.Position
+            dragStart = input.Position
+            startPos = main.Position
         end
     end)
     
@@ -477,8 +421,8 @@ local function createKeyUI(callback)
     
     game:GetService("UserInputService").InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragInput
-            mainFrame.Position = UDim2.new(
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y
             )
@@ -488,34 +432,23 @@ local function createKeyUI(callback)
     -- Entry animation
     screenGui.Parent = playerGui
     
-    blurBg.BackgroundTransparency = 1
-    TweenService:Create(blurBg, TweenInfo.new(0.3), {
-        BackgroundTransparency = 0.3
+    overlay.BackgroundTransparency = 1
+    TweenService:Create(overlay, TweenInfo.new(0.25), {
+        BackgroundTransparency = 0.4
     }):Play()
     
-    mainFrame.Size = UDim2.new(0, 0, 0, 0)
-    mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    main.Size = UDim2.new(0, 0, 0, 0)
+    main.Position = UDim2.new(0.5, 0, 0.5, 0)
     
-    TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 450, 0, 280),
-        Position = UDim2.new(0.5, -225, 0.5, -140)
+    TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
+        Size = UDim2.new(0, 420, 0, 240),
+        Position = UDim2.new(0.5, -210, 0.5, -120)
     }):Play()
 end
 
 -- Main function to show key system
 function CheckKeySystem.show(callback)
-    -- Check if session already exists and is valid
-    local valid, sessionOrError = CheckKeySystem.verifySession()
-    
-    if valid then
-        print("Valid session found, skipping key check")
-        if callback then
-            callback(true, sessionOrError)
-        end
-        return
-    end
-    
-    -- Show UI for key input
+    -- ALWAYS show key UI for testing (no session cache)
     createKeyUI(callback)
 end
 
