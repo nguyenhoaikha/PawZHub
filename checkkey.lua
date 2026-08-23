@@ -70,19 +70,66 @@ local function getHWID()
     local HttpService = game:GetService("HttpService")
     local UserInputService = game:GetService("UserInputService")
     
-    local hwid = ""
-    -- Combine multiple factors for HWID
+    local components = {}
+    
+    -- Component 1: Roblox Analytics Client ID (Most stable)
     pcall(function()
-        local factors = {
-            game:GetService("RbxAnalyticsService"):GetClientId(),
-            tostring(UserInputService:GetGamepadIds()[1] or "no-gamepad"),
-            tostring(game.PlaceId),
-        }
-        hwid = HttpService:JSONEncode(factors)
+        local clientId = game:GetService("RbxAnalyticsService"):GetClientId()
+        if clientId and clientId ~= "" then
+            table.insert(components, clientId)
+        end
     end)
     
-    -- Hash the HWID
-    return HttpService:GenerateGUID(false):gsub("-", ""):sub(1, 16):upper()
+    -- Component 2: User fingerprint (User ID + Account Age)
+    local player = game:GetService("Players").LocalPlayer
+    local fingerprint = string.format("%d:%d", player.UserId, player.AccountAge)
+    table.insert(components, fingerprint)
+    
+    -- Component 3: Platform detection
+    local platform = "unknown"
+    if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+        platform = "mobile"
+    elseif UserInputService.GamepadEnabled then
+        platform = "console"
+    elseif UserInputService.KeyboardEnabled then
+        platform = "pc"
+    end
+    table.insert(components, platform)
+    
+    -- Component 4: Gamepad ID (if available)
+    pcall(function()
+        local gamepads = UserInputService:GetGamepadIds()
+        if #gamepads > 0 then
+            table.insert(components, tostring(gamepads[1]))
+        end
+    end)
+    
+    -- Combine all components
+    local combined = table.concat(components, "|")
+    
+    -- Hash function (FNV-1a variant)
+    local function hash(str)
+        local h = 2166136261
+        for i = 1, #str do
+            h = bit32.bxor(h, string.byte(str, i))
+            h = (h * 16777619) % 4294967296
+        end
+        return h
+    end
+    
+    -- Generate HWID
+    local h1 = hash(combined)
+    local h2 = hash(combined .. "salt")
+    
+    -- Format as 16-character hex
+    local hwid = string.format("%08X%08X", h1, h2)
+    
+    -- Store for later use
+    _G.PawZHub_HWID = hwid
+    
+    debugLog("HWID generated:", hwid:sub(1, 8) .. "...")
+    
+    return hwid
 end
 
 -- Simple encryption for local storage
