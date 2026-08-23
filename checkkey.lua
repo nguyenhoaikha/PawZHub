@@ -17,7 +17,7 @@ local CONFIG = {
 
     SESSION_DURATION = 3600,
     MAX_RETRY_ATTEMPTS = 3,
-    LOCKOUT_DURATION = 300,
+    LOCKOUT_DURATION = 3,  -- Giảm từ 300s xuống 3s
     RATE_LIMIT_COOLDOWN = 2,
     ENABLE_HWID_BINDING = true,
 
@@ -437,42 +437,38 @@ local function createKeyUI(callback, executorInfo)
     screenGui.Name = "PawZHubKeySystem"
     screenGui.ResetOnSpawn = false
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.IgnoreGuiInset = true  -- Fullscreen
 
-    -- Backdrop
-    local backdrop = Instance.new("Frame")
-    backdrop.Size = UDim2.new(1, 0, 1, 0)
-    backdrop.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
-    backdrop.BackgroundTransparency = 1
-    backdrop.BorderSizePixel = 0
-    backdrop.Parent = screenGui
+    -- NO BACKDROP - Bỏ backdrop đen mờ che game
 
     -- Window
     local window = Instance.new("Frame")
     window.Size = UDim2.new(0, windowWidth, 0, windowHeight)
     window.Position = UDim2.new(0.5, -windowWidth / 2, 0.5, -windowHeight / 2)
-    window.BackgroundColor3 = Color3.fromRGB(30, 30, 35)  -- Đổi từ trắng sang đen
+    window.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     window.BorderSizePixel = 0
     window.Parent = screenGui
+    window.ClipsDescendants = false  -- Cho phép shadow
 
     Instance.new("UICorner", window).CornerRadius = UDim.new(0, 12)
 
     local windowBorder = Instance.new("UIStroke", window)
-    windowBorder.Color = Color3.fromRGB(50, 50, 55)  -- Border tối
-    windowBorder.Thickness = 1
-    windowBorder.Transparency = 0.5
+    windowBorder.Color = Color3.fromRGB(70, 75, 85)  -- Border sáng hơn
+    windowBorder.Thickness = 2
+    windowBorder.Transparency = 0
 
-    -- Shadow
+    -- Shadow (drop shadow effect) - Gắn vào window thay vì screenGui
     local shadow = Instance.new("ImageLabel")
-    shadow.Size = UDim2.new(1, 40, 1, 40)
-    shadow.Position = UDim2.new(0, -20, 0, 10)
+    shadow.Size = UDim2.new(1, 50, 1, 50)
+    shadow.Position = UDim2.new(0, -25, 0, 15)
     shadow.BackgroundTransparency = 1
     shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
     shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.ImageTransparency = 1
+    shadow.ImageTransparency = 0.6
     shadow.ScaleType = Enum.ScaleType.Slice
     shadow.SliceCenter = Rect.new(10, 10, 10, 10)
-    shadow.ZIndex = 0
-    shadow.Parent = screenGui
+    shadow.ZIndex = -1
+    shadow.Parent = window
 
     -- Title bar
     local titleBar = Instance.new("Frame")
@@ -524,30 +520,31 @@ local function createKeyUI(callback, executorInfo)
         -- Red button: Close
         if i == 1 then
             dot.MouseButton1Click:Connect(function()
-                TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
-                    Size = UDim2.new(0, 0, 0, 0)
+                -- Animation: Scale down + fade
+                TweenService:Create(window, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                    Size = UDim2.new(0, 0, 0, 0),
+                    Rotation = 90
                 }):Play()
-                TweenService:Create(backdrop, TweenInfo.new(0.2), {
-                    BackgroundTransparency = 1
-                }):Play()
-                task.wait(0.2)
+                task.wait(0.25)
                 screenGui:Destroy()
             end)
         end
         
-        -- Yellow button: Minimize (hide)
+        -- Yellow button: Minimize (shrink to titlebar)
         if i == 2 then
+            local isMinimized = false
+            local normalSize = UDim2.new(0, windowWidth, 0, windowHeight)
+            local minimizedSize = UDim2.new(0, windowWidth, 0, 44)  -- Chỉ còn titlebar
+            
             dot.MouseButton1Click:Connect(function()
-                local isMinimized = window.Visible
+                isMinimized = not isMinimized
                 if isMinimized then
-                    window.Visible = false
-                    TweenService:Create(backdrop, TweenInfo.new(0.15), {
-                        BackgroundTransparency = 1
+                    TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                        Size = minimizedSize
                     }):Play()
                 else
-                    window.Visible = true
-                    TweenService:Create(backdrop, TweenInfo.new(0.15), {
-                        BackgroundTransparency = 0.4
+                    TweenService:Create(window, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+                        Size = normalSize
                     }):Play()
                 end
             end)
@@ -599,6 +596,80 @@ local function createKeyUI(callback, executorInfo)
     title.Font = Enum.Font.GothamMedium
     title.TextTransparency = 0  -- Show text ngay
     title.Parent = titleBar
+    
+    -- Right side buttons (Discord, Copy HWID, Info)
+    local rightButtons = Instance.new("Frame")
+    rightButtons.Size = UDim2.new(0, 120, 0, 28)
+    rightButtons.Position = UDim2.new(1, -130, 0, 8)
+    rightButtons.BackgroundTransparency = 1
+    rightButtons.Parent = titleBar
+    
+    local function createIconButton(text, pos, tooltip)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 32, 0, 28)
+        btn.Position = UDim2.new(0, pos, 0, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        btn.BorderSizePixel = 0
+        btn.Text = text
+        btn.TextColor3 = Color3.fromRGB(200, 200, 210)
+        btn.TextSize = 14
+        btn.Font = Enum.Font.GothamBold
+        btn.AutoButtonColor = false
+        btn.Parent = rightButtons
+        
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+        
+        -- Hover effect
+        btn.MouseEnter:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.1), {
+                BackgroundColor3 = Color3.fromRGB(60, 60, 70),
+                TextColor3 = Color3.fromRGB(255, 255, 255)
+            }):Play()
+        end)
+        btn.MouseLeave:Connect(function()
+            TweenService:Create(btn, TweenInfo.new(0.1), {
+                BackgroundColor3 = Color3.fromRGB(40, 40, 45),
+                TextColor3 = Color3.fromRGB(200, 200, 210)
+            }):Play()
+        end)
+        
+        return btn
+    end
+    
+    -- Discord button
+    local discordBtn = createIconButton("D", 0, "Discord")
+    discordBtn.MouseButton1Click:Connect(function()
+        local discordLink = "https://discord.gg/pawzhub"
+        if setclipboard then
+            setclipboard(discordLink)
+            discordBtn.Text = "✓"
+            discordBtn.BackgroundColor3 = Color3.fromRGB(40, 205, 65)
+            task.wait(1)
+            discordBtn.Text = "D"
+            discordBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        end
+    end)
+    
+    -- Copy HWID button
+    local hwidBtn = createIconButton("H", 38, "Copy HWID")
+    hwidBtn.MouseButton1Click:Connect(function()
+        local hwid = getHWID()
+        if setclipboard then
+            setclipboard(hwid)
+            hwidBtn.Text = "✓"
+            hwidBtn.BackgroundColor3 = Color3.fromRGB(40, 205, 65)
+            task.wait(1)
+            hwidBtn.Text = "H"
+            hwidBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        end
+    end)
+    
+    -- Info/Help button
+    local infoBtn = createIconButton("?", 76, "Info")
+    infoBtn.MouseButton1Click:Connect(function()
+        status.Text = "HWID: " .. getHWID():sub(1, 16) .. "..."
+        status.TextColor3 = Color3.fromRGB(0, 122, 255)
+    end)
 
     -- Content
     local content = Instance.new("Frame")
@@ -649,15 +720,30 @@ local function createKeyUI(callback, executorInfo)
     input.TextTransparency = 0  -- Show text
     input.Parent = inputContainer
 
-    -- Focus effects
+    -- Focus effects với animation
     input.Focused:Connect(function()
-        TweenService:Create(inputBorder, TweenInfo.new(0.15), {
-            Color = Color3.fromRGB(0, 122, 255), Thickness = 2
+        TweenService:Create(inputBorder, TweenInfo.new(0.2), {
+            Color = Color3.fromRGB(0, 122, 255), 
+            Thickness = 2
+        }):Play()
+        TweenService:Create(inputContainer, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        }):Play()
+        -- Glow effect
+        TweenService:Create(input, TweenInfo.new(0.2), {
+            TextColor3 = Color3.fromRGB(255, 255, 255)
         }):Play()
     end)
     input.FocusLost:Connect(function()
-        TweenService:Create(inputBorder, TweenInfo.new(0.15), {
-            Color = Color3.fromRGB(200, 205, 215), Thickness = 1
+        TweenService:Create(inputBorder, TweenInfo.new(0.2), {
+            Color = Color3.fromRGB(60, 65, 75), 
+            Thickness = 1
+        }):Play()
+        TweenService:Create(inputContainer, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        }):Play()
+        TweenService:Create(input, TweenInfo.new(0.2), {
+            TextColor3 = Color3.fromRGB(240, 240, 245)
         }):Play()
     end)
 
@@ -732,25 +818,29 @@ local function createKeyUI(callback, executorInfo)
     status.TextTransparency = 0  -- Show status
     status.Parent = content
 
-    -- Hover effects
+    -- Hover effects với scale animation
     getKeyBtn.MouseEnter:Connect(function()
-        TweenService:Create(getKeyBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(60, 60, 65)  -- Hover tối hơn
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(60, 60, 65),
+            Size = UDim2.new(0.48, 2, 1, 2)  -- Scale up slightly
         }):Play()
     end)
     getKeyBtn.MouseLeave:Connect(function()
-        TweenService:Create(getKeyBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        TweenService:Create(getKeyBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(50, 50, 55),
+            Size = UDim2.new(0.48, 0, 1, 0)
         }):Play()
     end)
     submitBtn.MouseEnter:Connect(function()
-        TweenService:Create(submitBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(20, 142, 255)
+        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(20, 142, 255),
+            Size = UDim2.new(0.48, 2, 1, 2)  -- Scale up
         }):Play()
     end)
     submitBtn.MouseLeave:Connect(function()
-        TweenService:Create(submitBtn, TweenInfo.new(0.12), {
-            BackgroundColor3 = Color3.fromRGB(0, 122, 255)
+        TweenService:Create(submitBtn, TweenInfo.new(0.15), {
+            BackgroundColor3 = Color3.fromRGB(0, 122, 255),
+            Size = UDim2.new(0.48, 0, 1, 0)
         }):Play()
     end)
 
@@ -854,31 +944,59 @@ local function createKeyUI(callback, executorInfo)
             local valid, message, keyData = verifyKeyRemote(key)
 
             if valid then
-                submitBtn.Text = "Success"
-                TweenService:Create(submitBtn, TweenInfo.new(0.2), {
-                    BackgroundColor3 = Color3.fromRGB(52, 199, 89)
+                submitBtn.Text = "✓ Success"
+                TweenService:Create(submitBtn, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
+                    BackgroundColor3 = Color3.fromRGB(52, 199, 89),
+                    Size = UDim2.new(0.48, 5, 1, 3)  -- Pop effect
                 }):Play()
-                status.Text = "Access granted"
+                status.Text = "Access granted! Loading..."
                 status.TextColor3 = Color3.fromRGB(52, 199, 89)
 
-                task.wait(1)
+                task.wait(0.8)
                 local session = createSession(key, keyData)
 
-                -- Fade out
-                for _, obj in ipairs({window, shadow, backdrop}) do
-                    TweenService:Create(obj, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
-                end
-                task.wait(0.25)
+                -- Fade out with rotation
+                TweenService:Create(window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+                    Size = UDim2.new(0, 0, 0, 0),
+                    Rotation = 180,
+                    BackgroundTransparency = 1
+                }):Play()
+                TweenService:Create(shadow, TweenInfo.new(0.3), { ImageTransparency = 1 }):Play()
+                
+                task.wait(0.3)
                 screenGui:Destroy()
 
                 if callback then callback(true, session) end
             else
+                submitBtn.Text = "✗ Failed"
+                TweenService:Create(submitBtn, TweenInfo.new(0.15), {
+                    BackgroundColor3 = Color3.fromRGB(255, 59, 48)
+                }):Play()
+                
+                -- Shake animation
+                local originalPos = window.Position
+                for i = 1, 3 do
+                    TweenService:Create(window, TweenInfo.new(0.05), {
+                        Position = originalPos + UDim2.new(0, 10, 0, 0)
+                    }):Play()
+                    task.wait(0.05)
+                    TweenService:Create(window, TweenInfo.new(0.05), {
+                        Position = originalPos + UDim2.new(0, -10, 0, 0)
+                    }):Play()
+                    task.wait(0.05)
+                end
+                TweenService:Create(window, TweenInfo.new(0.1), {
+                    Position = originalPos
+                }):Play()
+                
+                status.Text = message or "Invalid key"
+                status.TextColor3 = Color3.fromRGB(255, 59, 48)
+                
+                task.wait(1)
                 submitBtn.Text = "Submit"
                 TweenService:Create(submitBtn, TweenInfo.new(0.2), {
                     BackgroundColor3 = Color3.fromRGB(0, 122, 255)
                 }):Play()
-                status.Text = message or "Invalid key"
-                status.TextColor3 = Color3.fromRGB(255, 59, 48)
 
                 State.failedAttempts += 1
                 if State.failedAttempts >= CONFIG.MAX_RETRY_ATTEMPTS then
@@ -919,42 +1037,47 @@ local function createKeyUI(callback, executorInfo)
     end)
 
     -- ============================================
-    -- ENTRY ANIMATION
+    -- ENTRY ANIMATION - Smooth bounce effect
     -- ============================================
     screenGui.Parent = playerGui
 
-    backdrop.BackgroundTransparency = 1
+    -- Start invisible
     window.BackgroundTransparency = 1
     windowBorder.Transparency = 1
     shadow.ImageTransparency = 1
     titleBar.BackgroundTransparency = 1
+    
+    -- Hide all traffic buttons
+    for _, dot in ipairs(trafficButtons) do
+        dot.BackgroundTransparency = 1
+    end
 
-    -- Fade in backdrop
-    TweenService:Create(backdrop, TweenInfo.new(0.3), { BackgroundTransparency = 0.65 }):Play()
-    task.wait(0.1)
+    -- Window bounce in from small
+    window.Size = UDim2.new(0, windowWidth * 0.7, 0, windowHeight * 0.7)
+    window.Position = UDim2.new(0.5, -(windowWidth * 0.7) / 2, 0.5, -(windowHeight * 0.7) / 2)
+    window.Rotation = -5
 
-    -- Window appears
-    window.Size = UDim2.new(0, windowWidth - 30, 0, windowHeight - 20)
-    window.Position = UDim2.new(0.5, -(windowWidth - 30) / 2, 0.5, -(windowHeight - 20) / 2)
-
-    TweenService:Create(window, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    TweenService:Create(window, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Size = UDim2.new(0, windowWidth, 0, windowHeight),
         Position = UDim2.new(0.5, -windowWidth / 2, 0.5, -windowHeight / 2),
-        BackgroundTransparency = 0
+        BackgroundTransparency = 0,
+        Rotation = 0
     }):Play()
 
-    TweenService:Create(windowBorder, TweenInfo.new(0.35), { Transparency = 0.5 }):Play()
-    TweenService:Create(shadow, TweenInfo.new(0.35), { ImageTransparency = 0.85 }):Play()
+    TweenService:Create(windowBorder, TweenInfo.new(0.4), { Transparency = 0 }):Play()
+    TweenService:Create(shadow, TweenInfo.new(0.4), { ImageTransparency = 0.6 }):Play()
 
-    task.wait(0.15)
+    task.wait(0.2)
 
-    -- Title bar
+    -- Title bar fade in
     TweenService:Create(titleBar, TweenInfo.new(0.25), { BackgroundTransparency = 0 }):Play()
 
-    -- Traffic lights (already visible, just fade in smoothly)
+    -- Traffic lights pop in
     for i, dot in ipairs(trafficButtons) do
-        task.wait(0.04)
-        TweenService:Create(dot, TweenInfo.new(0.2, Enum.EasingStyle.Back), {
+        task.wait(0.05)
+        dot.Size = UDim2.new(0, 8, 0, 8)  -- Start small
+        TweenService:Create(dot, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
+            Size = UDim2.new(0, 12, 0, 12),
             BackgroundTransparency = 0
         }):Play()
     end
