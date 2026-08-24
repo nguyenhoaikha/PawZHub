@@ -639,7 +639,7 @@ local function createKeyUI(callback, executorInfo)
         Size = UDim2.new(0, 28, 0, 28),
         Position = UDim2.new(0, 0, 0, 2),
         BackgroundTransparency = 1,
-        Text = "🐾",
+        Text = "",
         TextSize = 22,
         ZIndex = 11,
         Parent = brandRow,
@@ -675,7 +675,7 @@ local function createKeyUI(callback, executorInfo)
         Size = UDim2.new(1, -40, 0, 14),
         Position = UDim2.new(0, 32, 0, 22),
         BackgroundTransparency = 1,
-        Text = "Easy Key System — unlock in seconds.",
+        Text = "Premium Script Hub.",
         TextColor3 = Theme.textSub,
         TextSize = 11,
         Font = Enum.Font.Gotham,
@@ -752,7 +752,7 @@ local function createKeyUI(callback, executorInfo)
         Position = UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = Theme.btn,
         BackgroundTransparency = 0.05,
-        Text = "  🔗  Get Key",
+        Text = "Get Key",
         TextColor3 = Theme.text,
         TextSize = 13,
         Font = Enum.Font.GothamBold,
@@ -767,7 +767,7 @@ local function createKeyUI(callback, executorInfo)
         Position = UDim2.new(0.52, 4, 0, 0),
         BackgroundColor3 = Theme.btn,
         BackgroundTransparency = 0.05,
-        Text = "  ⟳  Verify Key",
+        Text = "Verify Key",
         TextColor3 = Theme.text,
         TextSize = 13,
         Font = Enum.Font.GothamBold,
@@ -841,7 +841,7 @@ local function createKeyUI(callback, executorInfo)
         Size = UDim2.new(1, 0, 0, 40),
         Position = UDim2.new(0, 0, 1, -56),
         BackgroundColor3 = Theme.gold,
-        Text = "👑  Join Discord · Lifetime Keys",
+        Text = "Join Discord · Lifetime Keys",
         TextColor3 = Color3.fromRGB(40, 30, 10),
         TextSize = 13,
         Font = Enum.Font.GothamBold,
@@ -867,7 +867,7 @@ local function createKeyUI(callback, executorInfo)
             setclipboard(CONFIG.DISCORD_URL)
             premiumBtn.Text = "✓  Discord link copied!"
             task.wait(1.5)
-            premiumBtn.Text = "👑  Join Discord · Lifetime Keys"
+            premiumBtn.Text = "Join Discord · Lifetime Keys"
         else
             status.Text = CONFIG.DISCORD_URL
             status.TextColor3 = Theme.accentSoft
