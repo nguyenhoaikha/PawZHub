@@ -468,7 +468,7 @@ end
 
 local function AddCorner(parent, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)  -- Giảm từ 12 → 8
+    c.CornerRadius = UDim.new(0, radius or 12)  -- Tăng từ 8 → 12
     c.Parent = parent
     return c
 end
@@ -536,7 +536,7 @@ local function createKeyUI(callback, executorInfo)
         Active = true,
         Parent = screenGui,
     })
-    AddCorner(window, 8)  -- Giảm từ 18 → 8 (góc tròn nhẹ hơn)
+    AddCorner(window, 14)  -- Tăng từ 8 → 14 (bo tròn hơn)
     local windowStroke = AddStroke(window, Color3.fromRGB(90, 100, 140), 1.5, 0.35)
 
     -- Background art (fills panel, clipped by corner)
@@ -772,7 +772,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = btnRow,
     })
-    AddCorner(submitBtn, 6)  -- Giảm từ 19 → 6
+    AddCorner(submitBtn, 10)  -- Tăng từ 6 → 10
 
     local function hoverBtn(btn)
         btn.MouseEnter:Connect(function()
@@ -846,7 +846,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = content,
     })
-    AddCorner(premiumBtn, 6)  -- Giảm từ 20 → 6
+    AddCorner(premiumBtn, 10)  -- Tăng từ 6 → 10
 
     premiumBtn.MouseEnter:Connect(function()
         TweenService:Create(premiumBtn, TweenInfo.new(0.12), {
