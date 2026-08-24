@@ -468,7 +468,7 @@ end
 
 local function AddCorner(parent, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 12)  -- Tăng từ 8 → 12
+    c.CornerRadius = UDim.new(0, radius or 16)  -- Tăng default 12 → 16
     c.Parent = parent
     return c
 end
@@ -536,8 +536,22 @@ local function createKeyUI(callback, executorInfo)
         Active = true,
         Parent = screenGui,
     })
-    AddCorner(window, 14)  -- Tăng từ 8 → 14 (bo tròn hơn)
+    AddCorner(window, 18)  -- Tăng lên 18px để mềm mại hơn
     local windowStroke = AddStroke(window, Color3.fromRGB(90, 100, 140), 1.5, 0.35)
+    
+    -- Thêm shadow glow effect
+    local shadowGlow = Instance.new("ImageLabel")
+    shadowGlow.Name = "ShadowGlow"
+    shadowGlow.Size = UDim2.new(1, 60, 1, 60)
+    shadowGlow.Position = UDim2.new(0, -30, 0, -30)
+    shadowGlow.BackgroundTransparency = 1
+    shadowGlow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    shadowGlow.ImageColor3 = Color3.fromRGB(80, 160, 255)
+    shadowGlow.ImageTransparency = 0.85
+    shadowGlow.ScaleType = Enum.ScaleType.Slice
+    shadowGlow.SliceCenter = Rect.new(10, 10, 10, 10)
+    shadowGlow.ZIndex = 0
+    shadowGlow.Parent = window
 
     -- Background art (fills panel, clipped by corner)
     local bgImage = CreateElement("ImageLabel", {
@@ -655,8 +669,8 @@ local function createKeyUI(callback, executorInfo)
         Parent = brandRow,
     })
 
-    -- Verified badge
-    CreateElement("TextLabel", {
+    -- Verified badge với shimmer effect
+    local verifiedBadge = CreateElement("TextLabel", {
         Size = UDim2.new(0, 16, 0, 16),
         Position = UDim2.new(0, 118, 0, 3),
         BackgroundTransparency = 1,
@@ -667,6 +681,20 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 11,
         Parent = brandRow,
     })
+    
+    -- Shimmer animation cho verified badge
+    task.spawn(function()
+        while verifiedBadge and verifiedBadge.Parent do
+            TweenService:Create(verifiedBadge, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                TextColor3 = Color3.fromRGB(120, 200, 255),
+            }):Play()
+            task.wait(1)
+            TweenService:Create(verifiedBadge, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                TextColor3 = Color3.fromRGB(80, 160, 255),
+            }):Play()
+            task.wait(1)
+        end
+    end)
 
     CreateElement("TextLabel", {
         Size = UDim2.new(1, -40, 0, 14),
@@ -691,7 +719,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 11,
         Parent = content,
     })
-    AddCorner(inputCard, 21)
+    AddCorner(inputCard, 25)  -- Bo tròn input hơn để đẹp
     local inputStroke = AddStroke(inputCard, Theme.inputBorder, 1, 0.4)
 
     CreateElement("TextLabel", {
@@ -721,17 +749,25 @@ local function createKeyUI(callback, executorInfo)
     })
 
     input.Focused:Connect(function()
-        TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+        TweenService:Create(inputStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             Color = Theme.accentSoft,
-            Transparency = 0.1,
-            Thickness = 1.5,
+            Transparency = 0.05,
+            Thickness = 2,
+        }):Play()
+        TweenService:Create(inputCard, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.05,
+            Size = UDim2.new(1, 2, 0, 44),
         }):Play()
     end)
     input.FocusLost:Connect(function()
-        TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+        TweenService:Create(inputStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             Color = Theme.inputBorder,
             Transparency = 0.4,
             Thickness = 1,
+        }):Play()
+        TweenService:Create(inputCard, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundTransparency = 0.15,
+            Size = UDim2.new(1, 0, 0, 42),
         }):Play()
     end)
 
@@ -757,7 +793,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = btnRow,
     })
-    AddCorner(getKeyBtn, 19)
+    AddCorner(getKeyBtn, 22)  -- Bo tròn button hơn
 
     local submitBtn = CreateElement("TextButton", {
         Size = UDim2.new(0.48, -4, 1, 0),
@@ -772,17 +808,19 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = btnRow,
     })
-    AddCorner(submitBtn, 10)  -- Tăng từ 6 → 10
+    AddCorner(submitBtn, 22)  -- Bo tròn giống getKeyBtn
 
     local function hoverBtn(btn)
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.12), {
+            TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                 BackgroundColor3 = Theme.btnHover,
+                Size = UDim2.new(btn.Size.X.Scale, btn.Size.X.Offset + 2, btn.Size.Y.Scale, btn.Size.Y.Offset + 2),
             }):Play()
         end)
         btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.12), {
+            TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 BackgroundColor3 = Theme.btn,
+                Size = UDim2.new(btn.Size.X.Scale, btn.Size.X.Offset - 2, btn.Size.Y.Scale, btn.Size.Y.Offset - 2),
             }):Play()
         end)
     end
@@ -803,7 +841,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = content,
     })
-    AddCorner(resetBtn, 14)
+    AddCorner(resetBtn, 22)  -- Bo tròn giống các button khác
 
     -- Status
     local status = CreateElement("TextLabel", {
@@ -846,16 +884,18 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = content,
     })
-    AddCorner(premiumBtn, 10)  -- Tăng từ 6 → 10
+    AddCorner(premiumBtn, 22)  -- Bo tròn Discord button
 
     premiumBtn.MouseEnter:Connect(function()
-        TweenService:Create(premiumBtn, TweenInfo.new(0.12), {
+        TweenService:Create(premiumBtn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             BackgroundColor3 = Color3.fromRGB(255, 220, 100),
+            Size = UDim2.new(1, 2, 0, 42),
         }):Play()
     end)
     premiumBtn.MouseLeave:Connect(function()
-        TweenService:Create(premiumBtn, TweenInfo.new(0.12), {
+        TweenService:Create(premiumBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundColor3 = Theme.gold,
+            Size = UDim2.new(1, 0, 0, 40),
         }):Play()
     end)
 
@@ -868,6 +908,20 @@ local function createKeyUI(callback, executorInfo)
         else
             status.Text = CONFIG.DISCORD_URL
             status.TextColor3 = Theme.accentSoft
+        end
+    end)
+    
+    -- Thêm pulse animation cho Premium button
+    task.spawn(function()
+        while premiumBtn and premiumBtn.Parent do
+            TweenService:Create(premiumBtn, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                BackgroundColor3 = Color3.fromRGB(255, 230, 120),
+            }):Play()
+            task.wait(1.5)
+            TweenService:Create(premiumBtn, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut), {
+                BackgroundColor3 = Theme.gold,
+            }):Play()
+            task.wait(1.5)
         end
     end)
 
@@ -1017,12 +1071,12 @@ local function createKeyUI(callback, executorInfo)
         end
     end)
 
-    -- Entry animation
-    window.Size = UDim2.new(0, WIN_W * 0.88, 0, WIN_H * 0.88)
-    window.BackgroundTransparency = 0.4
+    -- Entry animation với bounce effect mạnh hơn
+    window.Size = UDim2.new(0, WIN_W * 0.85, 0, WIN_H * 0.85)
+    window.BackgroundTransparency = 0.5
     dim.BackgroundTransparency = 1
-    TweenService:Create(dim, TweenInfo.new(0.3), { BackgroundTransparency = 0.45 }):Play()
-    TweenService:Create(window, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+    TweenService:Create(dim, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { BackgroundTransparency = 0.45 }):Play()
+    TweenService:Create(window, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
         Size = UDim2.new(0, WIN_W, 0, WIN_H),
         BackgroundTransparency = 0,
     }):Play()
