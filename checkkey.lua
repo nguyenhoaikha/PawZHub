@@ -9,13 +9,10 @@ local CheckKeySystem = {}
 -- ============================================
 
 local CONFIG = {
-    API_URL = "https://your-api-endpoint.com",
-    KEY_CHECK_URL = "https://your-api-endpoint.com/api/verify",
-    HWID_RESET_URL = "https://your-api-endpoint.com/api/hwid-reset",
-    BLACKLIST_URL = "https://your-api-endpoint.com/api/blacklist",
-    VERSION_CHECK_URL = "https://your-api-endpoint.com/api/version",
-    WEBHOOK_URL = "",
-    GET_KEY_URL = "https://getpawzhub.vercel.app/getkey",
+    -- Change this to your deployed backend URL
+    API_URL = "http://localhost:3000",  -- Change to your actual domain after deployment
+    KEY_CHECK_URL = "http://localhost:3000/api/verify",
+    GET_KEY_URL = "http://localhost:3000/getkey.html",
     DISCORD_URL = "https://discord.gg/pawzhub",
     PREMIUM_URL = "https://getpawzhub.vercel.app/getkey",
 
@@ -471,7 +468,7 @@ end
 
 local function AddCorner(parent, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 12)
+    c.CornerRadius = UDim.new(0, radius or 8)  -- Giảm từ 12 → 8
     c.Parent = parent
     return c
 end
@@ -539,7 +536,7 @@ local function createKeyUI(callback, executorInfo)
         Active = true,
         Parent = screenGui,
     })
-    AddCorner(window, 18)
+    AddCorner(window, 8)  -- Giảm từ 18 → 8 (góc tròn nhẹ hơn)
     local windowStroke = AddStroke(window, Color3.fromRGB(90, 100, 140), 1.5, 0.35)
 
     -- Background art (fills panel, clipped by corner)
@@ -775,7 +772,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = btnRow,
     })
-    AddCorner(submitBtn, 19)
+    AddCorner(submitBtn, 6)  -- Giảm từ 19 → 6
 
     local function hoverBtn(btn)
         btn.MouseEnter:Connect(function()
@@ -839,7 +836,7 @@ local function createKeyUI(callback, executorInfo)
     -- Gold CTA
     local premiumBtn = CreateElement("TextButton", {
         Size = UDim2.new(1, 0, 0, 40),
-        Position = UDim2.new(0, 0, 1, -56),
+        Position = UDim2.new(0, 0, 1, -48),  -- Giảm từ -56 → -48 (gần hơn 8px)
         BackgroundColor3 = Theme.gold,
         Text = "Join Discord · Lifetime Keys",
         TextColor3 = Color3.fromRGB(40, 30, 10),
@@ -849,7 +846,7 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = content,
     })
-    AddCorner(premiumBtn, 20)
+    AddCorner(premiumBtn, 6)  -- Giảm từ 20 → 6
 
     premiumBtn.MouseEnter:Connect(function()
         TweenService:Create(premiumBtn, TweenInfo.new(0.12), {
@@ -882,7 +879,7 @@ local function createKeyUI(callback, executorInfo)
             status.Text = "Get-key link copied to clipboard"
             status.TextColor3 = Theme.success
             task.wait(1.6)
-            getKeyBtn.Text = "  🔗  Get Key"
+            getKeyBtn.Text = "Get Key"
             status.Text = ""
         else
             status.Text = CONFIG.GET_KEY_URL
