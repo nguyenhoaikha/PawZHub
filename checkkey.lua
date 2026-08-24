@@ -614,17 +614,19 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(closeBtn, 14)
 
     closeBtn.MouseEnter:Connect(function()
-        TweenService:Create(closeBtn, TweenInfo.new(0.12), {
+        TweenService:Create(closeBtn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             BackgroundColor3 = Theme.danger,
             TextColor3 = Color3.new(1, 1, 1),
             BackgroundTransparency = 0,
+            Rotation = 90,
         }):Play()
     end)
     closeBtn.MouseLeave:Connect(function()
-        TweenService:Create(closeBtn, TweenInfo.new(0.12), {
+        TweenService:Create(closeBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundColor3 = Theme.closeBg,
             TextColor3 = Theme.textSub,
             BackgroundTransparency = 0.25,
+            Rotation = 0,
         }):Play()
     end)
     closeBtn.MouseButton1Click:Connect(function()
@@ -722,7 +724,7 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(inputCard, 25)  -- Bo tròn input hơn để đẹp
     local inputStroke = AddStroke(inputCard, Theme.inputBorder, 1, 0.4)
 
-    CreateElement("TextLabel", {
+    local keyIcon = CreateElement("TextLabel", {
         Size = UDim2.new(0, 28, 1, 0),
         Position = UDim2.new(0, 10, 0, 0),
         BackgroundTransparency = 1,
@@ -731,6 +733,17 @@ local function createKeyUI(callback, executorInfo)
         ZIndex = 12,
         Parent = inputCard,
     })
+    
+    -- Rotate animation cho key icon
+    task.spawn(function()
+        while keyIcon and keyIcon.Parent do
+            for i = 0, 360, 10 do
+                if not keyIcon or not keyIcon.Parent then break end
+                keyIcon.Rotation = i
+                task.wait(0.05)
+            end
+        end
+    end)
 
     local input = CreateElement("TextBox", {
         Size = UDim2.new(1, -48, 1, 0),
@@ -811,16 +824,15 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(submitBtn, 22)  -- Bo tròn giống getKeyBtn
 
     local function hoverBtn(btn)
+        local originalSize = btn.Size
         btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
                 BackgroundColor3 = Theme.btnHover,
-                Size = UDim2.new(btn.Size.X.Scale, btn.Size.X.Offset + 2, btn.Size.Y.Scale, btn.Size.Y.Offset + 2),
             }):Play()
         end)
         btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            TweenService:Create(btn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                 BackgroundColor3 = Theme.btn,
-                Size = UDim2.new(btn.Size.X.Scale, btn.Size.X.Offset - 2, btn.Size.Y.Scale, btn.Size.Y.Offset - 2),
             }):Play()
         end)
     end
@@ -887,13 +899,13 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(premiumBtn, 22)  -- Bo tròn Discord button
 
     premiumBtn.MouseEnter:Connect(function()
-        TweenService:Create(premiumBtn, TweenInfo.new(0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            BackgroundColor3 = Color3.fromRGB(255, 220, 100),
-            Size = UDim2.new(1, 2, 0, 42),
+        TweenService:Create(premiumBtn, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            BackgroundColor3 = Color3.fromRGB(255, 230, 130),
+            Size = UDim2.new(1, 4, 0, 44),
         }):Play()
     end)
     premiumBtn.MouseLeave:Connect(function()
-        TweenService:Create(premiumBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        TweenService:Create(premiumBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
             BackgroundColor3 = Theme.gold,
             Size = UDim2.new(1, 0, 0, 40),
         }):Play()
