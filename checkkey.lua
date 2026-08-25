@@ -9,10 +9,10 @@ local CheckKeySystem = {}
 -- ============================================
 
 local CONFIG = {
-    -- Change this to your deployed backend URL
-    API_URL = "http://localhost:3000",  -- Change to your actual domain after deployment
-    KEY_CHECK_URL = "http://localhost:3000/api/verify",
-    GET_KEY_URL = "http://localhost:3000/getkey.html",
+    -- Web API URLs (Next.js backend on Vercel)
+    API_URL = "https://getpawzhub.vercel.app",
+    KEY_CHECK_URL = "https://getpawzhub.vercel.app/api/verifykey",  -- GET endpoint with ?key=xxx
+    GET_KEY_URL = "https://getpawzhub.vercel.app/getkey",
     DISCORD_URL = "https://discord.gg/pawzhub",
     PREMIUM_URL = "https://getpawzhub.vercel.app/getkey",
 
