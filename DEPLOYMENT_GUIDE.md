@@ -127,7 +127,7 @@ web/
 │   │   │   ├── checkpoint/info/route.ts # GET: check token còn valid
 │   │   │   ├── lootlabs/route.ts        # GET: mint LootLabs link
 │   │   │   ├── hwid-reset/route.ts      # POST/GET: reset HWID (premium only)
-│   │   │   ├── checkout/route.ts        # POST: mint premium key (test mode)
+│   │   │   ├── checkout/route.ts        # POST: mint premium key (payment-gated)
 │   │   │   └── admin/route.ts           # GET/POST/DELETE: admin actions
 │   │   ├── getkey/
 │   │   │   ├── page.tsx                 # 3 platform cards

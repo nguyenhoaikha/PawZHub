@@ -47,9 +47,7 @@ local CONFIG = {
 
     -- Features
     ENABLE_HWID_BINDING = true,
-    ALLOW_OFFLINE_MODE  = false,
     CURRENT_VERSION     = "1.0.0",
-    DEBUG_MODE          = false,
 }
 
 -- ============================================
@@ -83,12 +81,6 @@ local State = {
     versionOk       = true,
     latestVersion   = CONFIG.CURRENT_VERSION,
 }
-
-local function debugLog(...)
-    if CONFIG.DEBUG_MODE then
-        print("[PawZHub Debug]", ...)
-    end
-end
 
 -- ============================================
 -- UTILITIES
@@ -244,24 +236,6 @@ end
 -- ============================================
 -- KEY VERIFICATION
 -- ============================================
-local function verifyKeyOffline(key)
-    -- Only used when ALLOW_OFFLINE_MODE is true (dev / offline testing).
-    local testKeys = {
-        ["PAWZ-FREE-2024-DEMO1"]   = { type = "free", tier = "free",     expiry = nil, features = {"basic"} },
-        ["PAWZ-PREM-2024-TEST"]   = { type = "free", tier = "premium",  expiry = os.time() + 30*24*3600, features = {"basic","advanced"} },
-        ["PAWZ-LIFE-2024-VIP1"]   = { type = "free", tier = "lifetime", expiry = nil, features = {"basic","advanced","premium","exclusive"} },
-        ["f03d3260914a9475faf29b12"] = { type = "lifetime", tier = "lifetime", expiry = nil, features = {"basic","advanced","premium","exclusive"}, hwidResetAvailable = true },
-    }
-    local data = testKeys[key]
-    if data then
-        if data.expiry and os.time() > data.expiry then
-            return false, "Key expired", nil
-        end
-        return true, "Valid (offline)", data
-    end
-    return false, "Invalid key"
-end
-
 local function verifyKeyRemote(key)
     local canProceed, msg = checkRateLimit()
     if not canProceed then return false, msg end
@@ -306,9 +280,9 @@ local function verifyKeyRemote(key)
         end
     end
 
-    if CONFIG.ALLOW_OFFLINE_MODE then
-        return verifyKeyOffline(key)
-    end
+    -- All HTTP methods failed. The script always needs network to
+    -- reach getpawzhub.vercel.app, so an empty response here means
+    -- the executor's HTTP layer is broken (or the user is offline).
     return false, "Server unreachable — check executor HTTP permissions"
 end
 

@@ -29,12 +29,8 @@ Script hub Roblox với hệ thống xác thực key, gắn HWID, hỗ trợ exe
 ## Bắt Đầu Nhanh
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main/loader.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main/loader-web.lua"))()
 ```
-
-**Key Thử:**
-- Miễn phí: `PAWZ-FREE-2024-DEMO1` (24h)
-- Vĩnh viễn: `PAWZ-LIFE-2024-VIP1` (vô thời hạn)
 
 ---
 
