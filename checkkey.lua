@@ -22,8 +22,7 @@ local SUPPORTED_GAMES = {
         name = "Blox Fruits",
         scriptPath = "script/PawZHubBF.lua",
     },
-    -- TODO: replace with the real Greedy Growers PlaceId
-    [4866604015] = {
+    [74102906764176] = {
         name = "Greedy Growers",
         scriptPath = "script/PawZHubGG.lua",
     },
