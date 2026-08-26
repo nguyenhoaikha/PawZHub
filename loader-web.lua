@@ -9,8 +9,8 @@ print("[PawZHub] Initializing v3.0...")
 
 local CONFIG = {
     GITHUB_REPO = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main",
-    WEB_URL = "http://localhost:3000",  -- Change after deployment: https://getpawzhub.vercel.app
-    GET_KEY_URL = "http://localhost:3000/getkey",
+    WEB_URL = "https://getpawzhub.vercel.app",
+    GET_KEY_URL = "https://getpawzhub.vercel.app/getkey",
     VERSION = "3.0.0"
 }
 

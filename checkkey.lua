@@ -1,6 +1,7 @@
--- PawZHub Key System v2.3
--- Ronix-style glass modal + custom background art
--- Supports: Free keys (PAWZ-XXXX-XXXX-XXXX) + Lifetime keys (24 hex)
+-- PawZHub Key System v3.0
+-- Full compatibility with PawZHub Web 2026 API
+-- Supports: Free keys (JWT from /api/getkey), Premium keys (PH.* from
+-- /api/checkout), HWID binding/reset, server-issued checkpoint tokens.
 
 local CheckKeySystem = {}
 
@@ -8,24 +9,38 @@ local CheckKeySystem = {}
 -- CONFIGURATION
 -- ============================================
 
+local SITE_URL = "https://getpawzhub.vercel.app"
+
 local CONFIG = {
-    -- Web API URLs (Next.js backend on Vercel)
-    API_URL = "https://getpawzhub.vercel.app",
-    KEY_CHECK_URL = "https://getpawzhub.vercel.app/api/verifykey",  -- GET endpoint with ?key=xxx
-    GET_KEY_URL = "https://getpawzhub.vercel.app/getkey",
+    -- Backend API base URL (Vercel)
+    API_BASE_URL = SITE_URL .. "/api",
+    VERIFY_ENDPOINT  = "/verifykey",
+    CHECKPOINT_ENDPOINT = "/checkpoint",
+    HWID_RESET_ENDPOINT = "/hwid-reset",
+
+    -- Convenience absolute URLs (fixes a v2.4 bug where these were nil)
+    KEY_CHECK_URL     = SITE_URL .. "/api/verifykey",
+    HWID_RESET_URL    = SITE_URL .. "/api/hwid-reset",
+    BLACKLIST_URL     = SITE_URL .. "/api/admin?action=blacklist",
+    VERSION_CHECK_URL = SITE_URL .. "/api/admin?action=stats",
+    GET_KEY_URL       = SITE_URL .. "/getkey",
+
+    -- Discord & Support
     DISCORD_URL = "https://discord.gg/pawzhub",
-    PREMIUM_URL = "https://getpawzhub.vercel.app/getkey",
+    SUPPORT_URL = SITE_URL .. "/discord",
 
-    SESSION_DURATION = 3600,
-    MAX_RETRY_ATTEMPTS = 3,
-    LOCKOUT_DURATION = 3,
-    RATE_LIMIT_COOLDOWN = 2,
+    -- Timing & Limits
+    SESSION_DURATION      = 3600,   -- 1 hour in-game session
+    MAX_RETRY_ATTEMPTS    = 3,
+    LOCKOUT_DURATION      = 3,      -- seconds
+    RATE_LIMIT_COOLDOWN   = 2,      -- seconds between verify attempts
+    CACHE_DURATION        = 60,     -- seconds to cache a valid key locally
+
+    -- Features
     ENABLE_HWID_BINDING = true,
-
-    ALLOW_OFFLINE_MODE = true,
-    CACHE_DURATION = 600,
-    CURRENT_VERSION = "2.3.0",
-    DEBUG_MODE = false,
+    ALLOW_OFFLINE_MODE  = false,    -- Disabled in production
+    CURRENT_VERSION     = "3.0.0",
+    DEBUG_MODE          = false,
 }
 
 -- Embedded background (star burst art) — loaded via getcustomasset when available
@@ -113,6 +128,14 @@ local function detectKeyType(key)
     key = key:match("^%s*(.-)%s*$") or key
     if key:match("^[a-f0-9]{24}$") then return "lifetime" end
     if key:match("^PAWZ%-[A-Z0-9]+%-[A-Z0-9]+%-[A-Z0-9]+$") then return "free" end
+    -- Premium HMAC key from the web checkout (PH.<payload>.<signature>)
+    if key:sub(1, 3) == "PH." and key:match("^PH%.[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+$") then
+        return "premium"
+    end
+    -- JWT free key from the web getkey page (eyJ...)
+    if key:match("^ey[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+$") then
+        return "web"
+    end
     return nil
 end
 
@@ -120,6 +143,10 @@ local function normalizeKey(key)
     if not key or type(key) ~= "string" then return "" end
     key = key:match("^%s*(.-)%s*$") or key
     if key:match("^[a-fA-F0-9]{24}$") then return key:lower() end
+    -- Web keys (JWT / PH.*) are case-sensitive: never transform them.
+    if detectKeyType(key) == "web" or detectKeyType(key) == "premium" then
+        return key
+    end
     return key:upper()
 end
 
