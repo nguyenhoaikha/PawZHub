@@ -12,6 +12,23 @@ local CheckKeySystem = {}
 local SITE_URL = "https://getpawzhub.vercel.app"
 local GET_KEY_URL = SITE_URL .. "/getkey"
 
+-- Game scripts: after a successful key verification, the modal
+-- closes and the right script loads automatically. Add a new entry
+-- for each game you support. scriptUrl is the raw GitHub URL of the
+-- .lua file in the PawZHub repo's /script directory.
+local GITHUB_RAW = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main"
+local SUPPORTED_GAMES = {
+    [2753915549] = {
+        name = "Blox Fruits",
+        scriptPath = "script/PawZHubBF.lua",
+    },
+    -- TODO: replace with the real Greedy Growers PlaceId
+    [4866604015] = {
+        name = "Greedy Growers",
+        scriptPath = "script/PawZHubGG.lua",
+    },
+}
+
 local CONFIG = {
     -- Backend API
     API_BASE_URL       = SITE_URL .. "/api",
@@ -32,7 +49,7 @@ local CONFIG = {
     -- Features
     ENABLE_HWID_BINDING = true,
     ALLOW_OFFLINE_MODE  = false,
-    CURRENT_VERSION     = "4.0.0",
+    CURRENT_VERSION     = "1.0.0",
     DEBUG_MODE          = false,
 }
 
@@ -344,6 +361,50 @@ local function createSession(key, keyData)
     return sessionData
 end
 
+-- ============================================
+-- AUTO-LOAD GAME SCRIPT AFTER VERIFY
+-- ============================================
+-- Once a key is verified we close the modal and load the right game
+-- script for the user's current PlaceId. This way the user only has
+-- to paste one loadstring (for checkkey.lua); the correct per-game
+-- script is fetched from GitHub automatically.
+
+local function loadGameScript(placeId)
+    local entry = SUPPORTED_GAMES[placeId]
+    if not entry then
+        warn(("[PawZHub] PlaceId %d is not in SUPPORTED_GAMES. Game script not loaded."):format(placeId))
+        return false, "Game not supported"
+    end
+
+    local url = GITHUB_RAW .. "/" .. entry.scriptPath
+    print(("[PawZHub] Loading %s from %s"):format(entry.name, url))
+
+    local ok, body = pcall(function()
+        -- `game` is the Roblox global; do NOT shadow it with a local.
+        return game:HttpGet(url)
+    end)
+    if not ok or type(body) ~= "string" or body == "" then
+        warn("[PawZHub] Failed to fetch " .. url .. ": " .. tostring(body))
+        return false, "Failed to download game script"
+    end
+
+    local fn, err = loadstring(body)
+    if not fn then
+        warn("[PawZHub] Syntax error in " .. entry.scriptPath .. ": " .. tostring(err))
+        return false, "Game script has a syntax error"
+    end
+
+    local ok2, runErr = pcall(fn)
+    if not ok2 then
+        warn("[PawZHub] Runtime error in " .. entry.scriptPath .. ": " .. tostring(runErr))
+        return false, "Game script crashed on load"
+    end
+    return true, nil
+end
+
+CheckKeySystem.loadGameScript = loadGameScript
+CheckKeySystem.getSupportedGames = function() return SUPPORTED_GAMES end
+
 function CheckKeySystem.verifySession()
     if not _G.PawZHubSession then return false, "No session" end
     local s = _G.PawZHubSession
@@ -453,7 +514,7 @@ local function createKeyUI(callback, executorInfo)
         or executorInfo.platform == "Android"
     )
     local WIN_W = isMobile and 320 or 380
-    local WIN_H = isMobile and 320 or 360
+    local WIN_H = isMobile and 380 or 400
 
     local screenGui = CreateElement("ScreenGui", {
         Name = "PawZHubKeySystem",
@@ -485,7 +546,7 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(window, 10)
     AddStroke(window, T.border, 1, 0)
 
-    -- Header
+    -- Header (also acts as the drag handle)
     local header = CreateElement("Frame", {
         Size = UDim2.new(1, 0, 0, 44),
         Position = UDim2.new(0, 0, 0, 0),
@@ -497,9 +558,9 @@ local function createKeyUI(callback, executorInfo)
         Size = UDim2.new(1, -60, 1, 0),
         Position = UDim2.new(0, 16, 0, 0),
         BackgroundTransparency = 1,
-        Text = "PawZHub  ·  Key System",
+        Text = "PawZHub",
         TextColor3 = T.text,
-        TextSize = 14,
+        TextSize = 15,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = header,
@@ -533,9 +594,40 @@ local function createKeyUI(callback, executorInfo)
         screenGui:Destroy()
     end)
 
+    -- ---- DRAG: header is the drag handle ----
+    local UserInputService = game:GetService("UserInputService")
+    local dragging = false
+    local dragOffset = Vector2.zero
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            local absPos = window.AbsolutePosition
+            dragOffset = Vector2.new(
+                input.Position.X - absPos.X,
+                input.Position.Y - absPos.Y
+            )
+        end
+    end)
+    header.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            window.Position = UDim2.new(
+                0, input.Position.X - dragOffset.X,
+                0, input.Position.Y - dragOffset.Y
+            )
+        end
+    end)
+
     -- Body
     local body = CreateElement("Frame", {
-        Size = UDim2.new(1, -32, 1, -84),
+        Size = UDim2.new(1, -32, 1, -64),
         Position = UDim2.new(0, 16, 0, 52),
         BackgroundTransparency = 1,
         Parent = window,
@@ -543,12 +635,12 @@ local function createKeyUI(callback, executorInfo)
 
     -- Status line
     local statusLabel = CreateElement("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 18),
+        Size = UDim2.new(1, 0, 0, 16),
         Position = UDim2.new(0, 0, 0, 0),
         BackgroundTransparency = 1,
         Text = "Enter your PawZHub key to verify",
         TextColor3 = T.textMuted,
-        TextSize = 12,
+        TextSize = 11,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextYAlignment = Enum.TextYAlignment.Top,
@@ -557,8 +649,8 @@ local function createKeyUI(callback, executorInfo)
 
     -- Input + verify row
     local input = CreateElement("TextBox", {
-        Size = UDim2.new(1, 0, 0, 36),
-        Position = UDim2.new(0, 0, 0, 26),
+        Size = UDim2.new(1, 0, 0, 32),
+        Position = UDim2.new(0, 0, 0, 22),
         BackgroundColor3 = T.surfaceAlt,
         Text = "",
         PlaceholderText = "Paste your key (eyJ… or PH.…)",
@@ -573,8 +665,8 @@ local function createKeyUI(callback, executorInfo)
     AddStroke(input, T.border, 1, 0)
 
     local verifyBtn = CreateElement("TextButton", {
-        Size = UDim2.new(1, 0, 0, 36),
-        Position = UDim2.new(0, 0, 0, 70),
+        Size = UDim2.new(1, 0, 0, 32),
+        Position = UDim2.new(0, 0, 0, 60),
         BackgroundColor3 = T.btn,
         Text = "Verify",
         TextColor3 = T.btnText,
@@ -593,13 +685,14 @@ local function createKeyUI(callback, executorInfo)
 
     -- Get key + Discord link (2-column)
     local linkRow = CreateElement("Frame", {
-        Size = UDim2.new(1, 0, 0, 32),
-        Position = UDim2.new(0, 0, 0, 114),
+        Size = UDim2.new(1, 0, 0, 28),
+        Position = UDim2.new(0, 0, 0, 100),
         BackgroundTransparency = 1,
         Parent = body,
     })
     local getKeyBtn = CreateElement("TextButton", {
         Size = UDim2.new(0.5, -4, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = T.surfaceAlt,
         Text = "Get Key",
         TextColor3 = T.text,
@@ -622,7 +715,7 @@ local function createKeyUI(callback, executorInfo)
     end)
 
     local discordBtn = CreateElement("TextButton", {
-        Size = UDim2.new(0.5, -4, 0, 0),
+        Size = UDim2.new(0.5, -4, 1, 0),
         Position = UDim2.new(0.5, 4, 0, 0),
         BackgroundColor3 = T.surfaceAlt,
         Text = "Discord",
@@ -642,10 +735,11 @@ local function createKeyUI(callback, executorInfo)
         end
     end)
 
-    -- Key info card (hidden until verified)
+    -- Key info card (hidden until verified; sits below linkRow + grows
+    -- the window when shown)
     local infoCard = CreateElement("Frame", {
-        Size = UDim2.new(1, 0, 0, 142),
-        Position = UDim2.new(0, 0, 0, 154),
+        Size = UDim2.new(1, 0, 0, 122),
+        Position = UDim2.new(0, 0, 0, 136),
         BackgroundColor3 = T.surfaceAlt,
         Visible = false,
         Parent = body,
@@ -654,8 +748,8 @@ local function createKeyUI(callback, executorInfo)
     AddStroke(infoCard, T.border, 1, 0)
 
     local infoHeader = CreateElement("TextLabel", {
-        Size = UDim2.new(1, -16, 0, 18),
-        Position = UDim2.new(0, 8, 0, 8),
+        Size = UDim2.new(1, -16, 0, 16),
+        Position = UDim2.new(0, 8, 0, 6),
         BackgroundTransparency = 1,
         Text = "Key details",
         TextColor3 = T.textMuted,
@@ -669,7 +763,7 @@ local function createKeyUI(callback, executorInfo)
     local function makeInfoLine(idx, label, value)
         local row = CreateElement("Frame", {
             Size = UDim2.new(1, -16, 0, 16),
-            Position = UDim2.new(0, 8, 0, 8 + idx * 18),
+            Position = UDim2.new(0, 8, 0, 4 + idx * 18),
             BackgroundTransparency = 1,
             Parent = infoCard,
         })
@@ -699,18 +793,65 @@ local function createKeyUI(callback, executorInfo)
 
     -- Footer / version
     local footer = CreateElement("TextLabel", {
-        Size = UDim2.new(1, -32, 0, 14),
-        Position = UDim2.new(0, 16, 1, -18),
+        Size = UDim2.new(1, -32, 0, 12),
+        Position = UDim2.new(0, 16, 1, -8),
         BackgroundTransparency = 1,
-        Text = "v" .. CONFIG.CURRENT_VERSION .. "  ·  " .. (executorInfo and executorInfo.name or "Unknown"),
+        Text = "v" .. CONFIG.CURRENT_VERSION,
         TextColor3 = T.textDim,
-        TextSize = 10,
+        TextSize = 9,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = window,
     })
 
     -- ---- Verify handler ----
+    local function showSuccess(tier)
+        -- Collapse the modal to a single clean "verified" line and
+        -- disable all inputs.
+        input.Visible = false
+        verifyBtn.Visible = false
+        linkRow.Visible = false
+        infoCard.Visible = false
+
+        -- Big status
+        statusLabel.Text = "Verified"
+        statusLabel.TextSize = 14
+        statusLabel.TextColor3 = T.ok
+        statusLabel.Font = Enum.Font.GothamBold
+        statusLabel.Position = UDim2.new(0, 0, 0.5, -22)
+        statusLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+        local sub = CreateElement("TextLabel", {
+            Size = UDim2.new(1, -16, 0, 18),
+            Position = UDim2.new(0, 8, 0.5, 4),
+            BackgroundTransparency = 1,
+            Text = "Loading " .. (SUPPORTED_GAMES[game.PlaceId] and SUPPORTED_GAMES[game.PlaceId].name or "game") .. " script…",
+            TextColor3 = T.textMuted,
+            TextSize = 11,
+            Font = Enum.Font.Gotham,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Parent = body,
+        })
+    end
+
+    local function closeAndLoad()
+        -- Close the modal with a small fade, then load the game script
+        TweenService:Create(window, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, WIN_W * 0.95, 0, WIN_H * 0.95),
+            BackgroundTransparency = 1,
+        }):Play()
+        TweenService:Create(dim, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
+        task.wait(0.3)
+        screenGui:Destroy()
+
+        -- Now load the per-game script. This runs after the modal is
+        -- gone so the user sees a clean transition.
+        local ok, err = loadGameScript(game.PlaceId)
+        if not ok then
+            warn("[PawZHub] " .. tostring(err))
+        end
+    end
+
     local function doVerify()
         local rawKey = input.Text
         if not rawKey or rawKey:match("^%s*$") then
@@ -720,56 +861,29 @@ local function createKeyUI(callback, executorInfo)
         end
         local key = normalizeKey(rawKey)
         statusLabel.Text = "Verifying…"
-        statusLabel.TextColor3 = T.warn
+        statusLabel.TextColor3 = T.textMuted
         verifyBtn.Text = "Verifying…"
         verifyBtn.Active = false
+        input.Active = false
 
-        local ok, msg, keyData
         task.spawn(function()
-            ok, msg, keyData = verifyKeyRemote(key)
+            local ok, msg, keyData = verifyKeyRemote(key)
             if ok then
                 State.failedAttempts = 0
                 State.lockedUntil = 0
                 local session = createSession(key, keyData)
-                local expires = keyData and keyData.expires
-                local remaining = ""
-                if expires then
-                    local hrs = math.max(0, math.floor((expires - DateTime.now().UnixTimestampMillis) / 3600000))
-                    remaining = hrs .. "h"
-                end
-                infoCard.Visible = true
-                -- Resize the window to fit infoCard
-                TweenService:Create(window, TweenInfo.new(0.2), {
-                    Size = UDim2.new(0, WIN_W, 0, WIN_H + 40),
-                }):Play()
-
-                -- Rebuild info lines with actual data
-                for _, child in ipairs(infoCard:GetChildren()) do
-                    if child:IsA("Frame") or child:IsA("TextLabel") and child ~= infoHeader then
-                        child:Destroy()
-                    end
-                end
-                local lines = {
-                    { "Tier",      (keyData and keyData.tier) or "free" },
-                    { "Type",      (keyData and keyData.type) or "free" },
-                    { "Source",    (keyData and keyData.source) or "unknown" },
-                    { "Features",  table.concat((keyData and keyData.features) or {"basic"}, ", ") },
-                    { "Remaining", remaining ~= "" and remaining or "n/a" },
-                }
-                for i, l in ipairs(lines) do
-                    makeInfoLine(i, l[1], l[2])
-                end
-
-                statusLabel.Text = "Verified — " .. (keyData and keyData.tier or "free") .. " tier"
-                statusLabel.TextColor3 = T.ok
-                verifyBtn.Text = "Verified"
                 if callback then callback(true, session) end
+
+                showSuccess(keyData and keyData.tier or "free")
+                task.wait(1.2) -- give the user a moment to read "Verified"
+                closeAndLoad()
             else
                 registerFailedAttempt()
                 statusLabel.Text = msg or "Invalid key"
                 statusLabel.TextColor3 = T.err
                 verifyBtn.Text = "Verify"
                 verifyBtn.Active = true
+                input.Active = true
                 if callback then callback(false, msg) end
             end
         end)
