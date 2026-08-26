@@ -131,11 +131,11 @@ end
 local function detectKeyType(key)
     if not key or type(key) ~= "string" then return nil end
     key = key:match("^%s*(.-)%s*$") or key
-    if key:match("^[a-f0-9]{24}$") then return "lifetime" end
-    if key:match("^PAWZ%-[A-Z0-9]+%-[A-Z0-9]+%-[A-Z0-9]+$") then return "free" end
+    -- PH.{base64url}.{hmac} — premium key (lifetime / monthly / trial)
     if key:sub(1, 3) == "PH." and key:match("^PH%.[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+$") then
         return "premium"
     end
+    -- eyJ... — JWT free key
     if key:match("^ey[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+%.[A-Za-z0-9_%-]+$") then
         return "web"
     end
@@ -145,9 +145,9 @@ end
 local function normalizeKey(key)
     if not key or type(key) ~= "string" then return "" end
     key = key:match("^%s*(.-)%s*$") or key
-    if key:match("^[a-fA-F0-9]{24}$") then return key:lower() end
-    -- Web keys (JWT / PH.*) are case-sensitive.
-    if detectKeyType(key) == "web" or detectKeyType(key) == "premium" then
+    -- JWT and PH.* keys are case-sensitive (base64url encoding)
+    local kt = detectKeyType(key)
+    if kt == "web" or kt == "premium" then
         return key
     end
     return key:upper()

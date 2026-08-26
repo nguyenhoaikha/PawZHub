@@ -140,8 +140,8 @@ Tìm thấy **1 bug CRITICAL** (sẽ crash 100% requests) + **1 bug CRITICAL b�
 
 **Fix:** Thêm vào `.env.local` (và `.env.example` để team khác biết):
 ```
-LOOTLABS_API_KEY=0925af6741885de78da9698d576b83982471754601aa4f4ff20e12927f1606e8
-LOOTLABS_APP_ID=qVLcXSgW
+LOOTLABS_API_KEY=<your-lootlabs-api-key>   # Get from Advanced tab in LootLabs dashboard
+LOOTLABS_APP_ID=<your-lootlabs-app-id>
 LOOTLABS_TIER_ID=3
 LOOTLABS_NUM_TASKS=3
 ```

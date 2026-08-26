@@ -182,3 +182,62 @@ export async function adminResetHWID(
     body: JSON.stringify({ key, newHwid, actor }),
   });
 }
+
+// ---- Redemption codes ----
+
+export type RedeemResult = {
+  success: boolean;
+  key: string;
+  plan: string;
+  tier: string;
+  issued: number;
+  expires: number;
+  issuedDate: string;
+  expiresDate: string;
+  discordUserId: string;
+  hwidResetCooldownDays: number;
+};
+
+export async function redeemCode(
+  code: string,
+  discordUserId: string
+): Promise<ApiResult<RedeemResult>> {
+  const BOT_TOKEN = process.env.BOT_REDEEM_TOKEN || '';
+  return call<RedeemResult>('/api/redeem', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${BOT_TOKEN}`,
+    },
+    body: JSON.stringify({ code, discordUserId }),
+  });
+}
+
+// ---- Key revocation ----
+
+export type RevokeKeyResult = {
+  success: boolean;
+  message: string;
+  revokedAt: number;
+};
+
+export async function revokeKey(
+  key: string,
+  reason: string,
+  actor: string
+): Promise<ApiResult<RevokeKeyResult>> {
+  return callAdmin<RevokeKeyResult>('/api/admin?action=revoke-key', {
+    method: 'POST',
+    body: JSON.stringify({ key, reason, actor }),
+  });
+}
+
+export type RevokedKeyEntry = {
+  keyId: string;
+  reason: string;
+  revokedAt: number;
+  revokedBy: string;
+};
+
+export async function listRevokedKeys(): Promise<ApiResult<{ revoked: RevokedKeyEntry[]; count: number }>> {
+  return callAdmin<{ revoked: RevokedKeyEntry[]; count: number }>('/api/admin?action=list-revoked');
+}

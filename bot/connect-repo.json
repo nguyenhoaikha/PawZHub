@@ -1,0 +1,10 @@
+{
+  "query": "mutation ConnectRepo($sid: String!, $i: ServiceConnectInput!) { serviceConnect(id: $sid, input: $i) { id } }",
+  "variables": {
+    "sid": "1db38021-f54c-4a31-ae0a-3ae1d40f7663",
+    "i": {
+      "repo": "nguyenhoaikha/PawZHubBot",
+      "branch": "main"
+    }
+  }
+}

@@ -7,8 +7,7 @@
  * Required env (.env):
  *   DISCORD_BOT_TOKEN
  *   DISCORD_CLIENT_ID
- *   DISCORD_GUILD_ID            (test server; for production, use deploy-commands.ts
- *                                 with empty GUILD_ID for global registration)
+ *   DISCORD_GUILD_ID
  *   WEB_API_URL
  *   WEB_ADMIN_TOKEN
  *   ADMIN_USER_IDS              (comma-separated Discord user IDs)
@@ -22,13 +21,9 @@ import {
   Events,
   ChatInputCommandInteraction,
 } from 'discord.js';
+import type { CommandModule } from './types';
 import { readdirSync } from 'fs';
 import { join } from 'path';
-
-type CommandModule = {
-  data: { name: string; toJSON: () => unknown };
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
-};
 
 const client = new Client({
   intents: [
@@ -37,8 +32,7 @@ const client = new Client({
   ],
 });
 
-// Single command loader pass: each .ts/.js file in src/commands/ must
-// export `data` (slash command builder) and `execute` (handler).
+// Load all command files from src/commands/
 const commandsDir = join(__dirname, 'commands');
 const commandFiles = readdirSync(commandsDir).filter(
   (f) => f.endsWith('.ts') || f.endsWith('.js')
@@ -70,7 +64,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
   try {
     await cmd.execute(interaction);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(`[PawZHub] Error in /${interaction.commandName}:`, err);
     const payload = {
       content: 'Something went wrong while running this command.',
@@ -90,7 +84,7 @@ if (!token) {
   process.exit(1);
 }
 
-client.login(token).catch((err) => {
+client.login(token).catch((err: unknown) => {
   console.error('[PawZHub] Login failed:', err);
   process.exit(1);
 });

@@ -31,7 +31,7 @@ Thêm (đặt cho cả 3 environment: Production, Preview, Development):
 | `DISCORD_WEBHOOK_URL` | (optional) | Báo purchase qua Discord |
 | `UPSTASH_REDIS_REST_URL` | (từ bước 1) | Redis URL |
 | `UPSTASH_REDIS_REST_TOKEN` | (từ bước 1) | Redis token |
-| `LOOTLABS_API_KEY` | `0925af6741885de78da9698d576b83982471754601aa4f4ff20e12927f1606e8` | LootLabs API key |
+| `LOOTLABS_API_KEY` | `<your-lootlabs-api-key>` | LootLabs API key (get from Advanced tab in LootLabs dashboard) |
 | `LOOTLABS_APP_ID` | `qVLcXSgW` | LootLabs App ID (từ dashboard) |
 | `LOOTLABS_TIER_ID` | `3` | Tier 3 (balance tốt nhất) |
 | `LOOTLABS_NUM_TASKS` | `3` | 3 ads/checkpoint |
