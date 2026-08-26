@@ -545,6 +545,75 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(window, 10)
     AddStroke(window, T.border, 1, 0)
 
+    -- ---- Toast: in-modal notification bar ----
+    -- Replaces Roblox's StarterGui SendNotification. The bar sits
+    -- at the bottom of the window (just above the footer) and
+    -- auto-dismisses after a short delay. The colored left strip
+    -- indicates the kind (ok / err / info). Text wraps and is
+    -- clipped so a long message never overflows the bar.
+    local toast = CreateElement("Frame", {
+        Size = UDim2.new(1, -32, 0, 32),
+        Position = UDim2.new(0, 16, 1, -64),
+        BackgroundColor3 = T.surfaceAlt,
+        BorderSizePixel = 0,
+        Visible = false,
+        ClipsDescendants = true,
+        Parent = window,
+    })
+    AddCorner(toast, 6)
+    AddStroke(toast, T.border, 1, 0)
+
+    local toastAccent = CreateElement("Frame", {
+        Size = UDim2.new(0, 3, 1, -8),
+        Position = UDim2.new(0, 4, 0, 4),
+        BackgroundColor3 = T.textMuted,
+        BorderSizePixel = 0,
+        Parent = toast,
+    })
+    AddCorner(toastAccent, 2)
+
+    local toastText = CreateElement("TextLabel", {
+        Size = UDim2.new(1, -20, 1, 0),
+        Position = UDim2.new(0, 14, 0, 0),
+        BackgroundTransparency = 1,
+        Text = "",
+        TextColor3 = T.text,
+        TextSize = 11,
+        Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = true,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        ClipsDescendants = true,
+        Parent = toast,
+    })
+
+    -- One active toast at a time. Re-showing cancels the prior
+    -- auto-dismiss so the user always sees the latest message.
+    local activeToastThread = nil
+    local function showToast(msg, kind, duration)
+        duration = duration or 3
+        local accent = T.textMuted
+        local text = T.text
+        if kind == "ok" then
+            accent = T.ok; text = T.ok
+        elseif kind == "err" then
+            accent = T.err; text = T.err
+        end
+        toastAccent.BackgroundColor3 = accent
+        toastText.Text = tostring(msg or "")
+        toastText.TextColor3 = text
+        toast.Visible = true
+        if activeToastThread then
+            task.cancel(activeToastThread)
+            activeToastThread = nil
+        end
+        activeToastThread = task.delay(duration, function()
+            toast.Visible = false
+            activeToastThread = nil
+        end)
+    end
+
     -- Header (also acts as the drag handle)
     local header = CreateElement("Frame", {
         Size = UDim2.new(1, 0, 0, 44),
@@ -632,7 +701,8 @@ local function createKeyUI(callback, executorInfo)
         Parent = window,
     })
 
-    -- Status line
+    -- Status line (centered text so 'Verified' / 'Auth failed' don't
+    -- touch the modal's left edge)
     local statusLabel = CreateElement("TextLabel", {
         Size = UDim2.new(1, 0, 0, 16),
         Position = UDim2.new(0, 0, 0, 0),
@@ -641,12 +711,13 @@ local function createKeyUI(callback, executorInfo)
         TextColor3 = T.textMuted,
         TextSize = 11,
         Font = Enum.Font.Gotham,
-        TextXAlignment = Enum.TextXAlignment.Left,
+        TextXAlignment = Enum.TextXAlignment.Center,
         TextYAlignment = Enum.TextYAlignment.Top,
         Parent = body,
     })
 
-    -- Input + verify row
+    -- Input + verify row. ClipsDescendants is REQUIRED so a long JWT
+    -- key doesn't overflow the input's left edge.
     local input = CreateElement("TextBox", {
         Size = UDim2.new(1, 0, 0, 32),
         Position = UDim2.new(0, 0, 0, 22),
@@ -658,6 +729,7 @@ local function createKeyUI(callback, executorInfo)
         TextSize = 12,
         Font = Enum.Font.Code,
         ClearTextOnFocus = false,
+        ClipsDescendants = true,
         Parent = body,
     })
     AddCorner(input, 6)
@@ -705,11 +777,9 @@ local function createKeyUI(callback, executorInfo)
     getKeyBtn.MouseButton1Click:Connect(function()
         if setclipboard then
             setclipboard(GET_KEY_URL)
-            statusLabel.Text = "Get Key URL copied to clipboard"
-            statusLabel.TextColor3 = T.ok
+            showToast("Get Key URL copied to clipboard", "ok", 2)
         else
-            statusLabel.Text = "Visit: " .. GET_KEY_URL
-            statusLabel.TextColor3 = T.text
+            showToast("Visit: " .. GET_KEY_URL, "info", 5)
         end
     end)
 
@@ -729,8 +799,9 @@ local function createKeyUI(callback, executorInfo)
     discordBtn.MouseButton1Click:Connect(function()
         if setclipboard then
             setclipboard(CONFIG.DISCORD_URL)
-            statusLabel.Text = "Discord URL copied to clipboard"
-            statusLabel.TextColor3 = T.ok
+            showToast("Discord URL copied to clipboard", "ok", 2)
+        else
+            showToast("Clipboard unavailable — open Discord manually", "err", 4)
         end
     end)
 
@@ -790,10 +861,13 @@ local function createKeyUI(callback, executorInfo)
         })
     end
 
-    -- Footer / version
+    -- Footer / version. Position must keep the 12px label fully
+    -- inside the window's clip rect; using `1, -8` would push the
+    -- bottom edge 4px past the window and ClipsDescendants would
+    -- hide the text.
     local footer = CreateElement("TextLabel", {
         Size = UDim2.new(1, -32, 0, 12),
-        Position = UDim2.new(0, 16, 1, -8),
+        Position = UDim2.new(0, 16, 1, -20),
         BackgroundTransparency = 1,
         Text = "v" .. CONFIG.CURRENT_VERSION,
         TextColor3 = T.textDim,
@@ -804,6 +878,8 @@ local function createKeyUI(callback, executorInfo)
     })
 
     -- ---- Verify handler ----
+    local subLabel = nil -- captured so closeAndLoad can update it
+                          -- when the per-game script fails to load.
     local function showSuccess(tier)
         -- Collapse the modal to a single clean "verified" line and
         -- disable all inputs.
@@ -812,15 +888,17 @@ local function createKeyUI(callback, executorInfo)
         linkRow.Visible = false
         infoCard.Visible = false
 
-        -- Big status
+        -- Big status — explicitly center the text so "Verified"
+        -- never sticks to the modal's left edge.
         statusLabel.Text = "Verified"
         statusLabel.TextSize = 14
         statusLabel.TextColor3 = T.ok
         statusLabel.Font = Enum.Font.GothamBold
         statusLabel.Position = UDim2.new(0, 0, 0.5, -22)
+        statusLabel.TextXAlignment = Enum.TextXAlignment.Center
         statusLabel.TextYAlignment = Enum.TextYAlignment.Center
 
-        local sub = CreateElement("TextLabel", {
+        subLabel = CreateElement("TextLabel", {
             Size = UDim2.new(1, -16, 0, 18),
             Position = UDim2.new(0, 8, 0.5, 4),
             BackgroundTransparency = 1,
@@ -834,7 +912,36 @@ local function createKeyUI(callback, executorInfo)
     end
 
     local function closeAndLoad()
-        -- Close the modal with a small fade, then load the game script
+        -- Try to load the per-game script BEFORE destroying the
+        -- modal. If it fails, show the error inside the modal via
+        -- the toast and the sub line, then auto-close after a few
+        -- seconds. The previous version destroyed the modal first
+        -- and only `warn()`-ed to the console, which left the
+        -- user with no visible feedback on a load failure.
+        local ok, err = loadGameScript(game.PlaceId)
+        if not ok then
+            local gameName = SUPPORTED_GAMES[game.PlaceId]
+                and SUPPORTED_GAMES[game.PlaceId].name
+                or ("PlaceId " .. tostring(game.PlaceId))
+            local msg
+            if err == "Game not supported" then
+                msg = "Verified, but " .. gameName .. " is not supported yet"
+                if subLabel then
+                    subLabel.Text = gameName .. " is not supported"
+                    subLabel.TextColor3 = T.err
+                end
+            else
+                msg = "Load failed: " .. tostring(err)
+                if subLabel then
+                    subLabel.Text = tostring(err)
+                    subLabel.TextColor3 = T.err
+                end
+            end
+            showToast(msg, "err", 5)
+            task.wait(3)
+        end
+
+        -- Close the modal with a small fade.
         TweenService:Create(window, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             Size = UDim2.new(0, WIN_W * 0.95, 0, WIN_H * 0.95),
             BackgroundTransparency = 1,
@@ -842,13 +949,6 @@ local function createKeyUI(callback, executorInfo)
         TweenService:Create(dim, TweenInfo.new(0.25), { BackgroundTransparency = 1 }):Play()
         task.wait(0.3)
         screenGui:Destroy()
-
-        -- Now load the per-game script. This runs after the modal is
-        -- gone so the user sees a clean transition.
-        local ok, err = loadGameScript(game.PlaceId)
-        if not ok then
-            warn("[PawZHub] " .. tostring(err))
-        end
     end
 
     local function doVerify()
