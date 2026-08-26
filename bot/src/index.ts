@@ -15,9 +15,20 @@
  */
 
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import {
+  Client,
+  Collection,
+  GatewayIntentBits,
+  Events,
+  ChatInputCommandInteraction,
+} from 'discord.js';
 import { readdirSync } from 'fs';
 import { join } from 'path';
+
+type CommandModule = {
+  data: { name: string; toJSON: () => unknown };
+  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+};
 
 const client = new Client({
   intents: [
@@ -26,14 +37,33 @@ const client = new Client({
   ],
 });
 
+// Single command loader pass: each .ts/.js file in src/commands/ must
+// export `data` (slash command builder) and `execute` (handler).
+const commandsDir = join(__dirname, 'commands');
+const commandFiles = readdirSync(commandsDir).filter(
+  (f) => f.endsWith('.ts') || f.endsWith('.js')
+);
+
+client.commands = new Collection<string, CommandModule>();
+for (const file of commandFiles) {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const mod: CommandModule = require(join(commandsDir, file));
+  if (mod.data && typeof mod.execute === 'function') {
+    client.commands.set(mod.data.name, mod);
+  } else {
+    console.warn(`[PawZHub] Skipping ${file}: missing data or execute export`);
+  }
+}
+
 client.once(Events.ClientReady, (c) => {
   console.log(`[PawZHub] Logged in as ${c.user.tag}`);
   console.log(`[PawZHub] Serving ${c.guilds.cache.size} guild(s)`);
+  console.log(`[PawZHub] ${client.commands.size} command(s) loaded`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
-  const cmd = client.commands?.get(interaction.commandName);
+  const cmd = client.commands.get(interaction.commandName);
   if (!cmd) {
     console.warn(`[PawZHub] No handler for /${interaction.commandName}`);
     return;
@@ -42,7 +72,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await cmd.execute(interaction);
   } catch (err: any) {
     console.error(`[PawZHub] Error in /${interaction.commandName}:`, err);
-    const payload = { content: 'Something went wrong while running this command.', ephemeral: true };
+    const payload = {
+      content: 'Something went wrong while running this command.',
+      ephemeral: true,
+    };
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply(payload).catch(() => {});
     } else {
@@ -50,25 +83,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 });
-
-// Command loader
-const commandsDir = join(__dirname, 'commands');
-const commandFiles = readdirSync(commandsDir).filter((f) => f.endsWith('.ts') || f.endsWith('.js'));
-const loaded: any[] = [];
-for (const file of commandFiles) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const mod = require(join(commandsDir, file));
-  if (mod.data && typeof mod.execute === 'function') {
-    loaded.push(mod.data);
-  }
-}
-client.commands = new (require('discord.js').Collection)();
-for (const file of commandFiles) {
-  const mod = require(join(commandsDir, file));
-  if (mod.data && typeof mod.execute === 'function') {
-    client.commands.set(mod.data.name, mod);
-  }
-}
 
 const token = process.env.DISCORD_BOT_TOKEN;
 if (!token) {

@@ -157,3 +157,28 @@ export async function inspectKey(
     body: JSON.stringify({ key }),
   });
 }
+
+export type ResetHWIDResult = {
+  success: boolean;
+  message: string;
+  previousHwid: string | null;
+  newHwid: string;
+  keyId: string;
+  expires: string;
+  cooldownBypassed: boolean;
+};
+
+/**
+ * Force-reset a premium key's HWID. Admin-only on the web side; the
+ * bot requires a matching admin Discord ID in ADMIN_USER_IDS.
+ */
+export async function adminResetHWID(
+  key: string,
+  newHwid: string,
+  actor: string
+): Promise<ApiResult<ResetHWIDResult>> {
+  return callAdmin<ResetHWIDResult>('/api/admin?action=reset-hwid', {
+    method: 'POST',
+    body: JSON.stringify({ key, newHwid, actor }),
+  });
+}

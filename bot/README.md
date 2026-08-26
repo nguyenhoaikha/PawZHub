@@ -9,6 +9,8 @@ admin dashboard via slash commands.
 |---------|-----|--------------|
 | `/verify key:<key>` | Anyone | Verify a key (PH.\* or JWT) and show tier/expiry/features |
 | `/keygen plan:<trial\|monthly\|lifetime> [count] [email] [roblox]` | Admin | Mint premium keys; sent via DM |
+| `/inspect-key key:<key>` | Admin | Show tier, expiry, HWID binding, and last 5 usage events for a key |
+| `/reset-hwid key:<ph-key> new-hwid:<id> [reason]` | Admin | Force-reset a premium key's HWID, bypassing the 7-day cooldown. Audit-logged |
 | `/blacklist userid:<id> reason:<reason>` | Admin | Block a user |
 | `/unblacklist userid:<id>` | Admin | Unblock a user |
 | `/stats` | Admin | Live system stats from the web API |

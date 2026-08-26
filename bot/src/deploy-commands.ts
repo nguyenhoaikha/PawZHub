@@ -36,16 +36,16 @@ const rest = new REST({ version: '10' }).setToken(token);
   try {
     console.log(`[PawZHub] Deploying ${commands.length} command(s)...`);
     if (guildId) {
-      const data = await rest.put(
+      const data = (await rest.put(
         Routes.applicationGuildCommands(clientId, guildId),
         { body: commands }
-      );
+      )) as any[];
       console.log(`[PawZHub] Done — registered ${data.length} guild command(s) for ${guildId}`);
     } else {
-      const data = await rest.put(
+      const data = (await rest.put(
         Routes.applicationCommands(clientId),
         { body: commands }
-      );
+      )) as any[];
       console.log(`[PawZHub] Done — registered ${data.length} global command(s) (may take up to 1h to appear)`);
     }
   } catch (err: any) {
