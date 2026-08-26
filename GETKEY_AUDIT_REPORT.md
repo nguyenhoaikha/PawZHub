@@ -7,24 +7,72 @@
 
 ## TL;DR
 
-Tìm thấy **1 bug CRITICAL** (sẽ crash 100% requests) + **5 bug HIGH** + nhiều cải tiến security/revenue. Tất cả đã fix và verify bằng end-to-end test trên local dev server.
+Tìm thấy **1 bug CRITICAL** (sẽ crash 100% requests) + **1 bug CRITICAL bảo mật** (checkpoint bypass) + **5 bug HIGH** + nhiều cải tiến security/revenue. Tất cả đã fix và verify bằng end-to-end test trên Vercel production.
 
 | # | Severity | Mô tả | Status |
 |---|----------|-------|--------|
 | 1 | 🔴 CRITICAL | `/api/getkey` reference undefined `expiresAt` → 100% crash | ✅ Fixed |
-| 2 | 🟠 HIGH | Renew flow chỉ accept server-issued tokens nhưng modal issue client-side | ✅ Fixed |
-| 3 | 🟠 HIGH | In-memory storage mất khi Vercel cold start | ✅ Fixed (Upstash Redis) |
-| 4 | 🟠 HIGH | LootLabs API key missing trong env | ✅ Fixed (env.example + .env.local) |
-| 5 | 🟠 HIGH | LootLabs response parser không handle `message[]` shape | ✅ Fixed |
-| 6 | 🟠 HIGH | HWID mismatch giữa web (UUID) và Lua (RbxAnalytics) → JWT free key luôn bị reject | ✅ Fixed |
-| 7 | 🟡 MED  | `/api/admin` `case 'logs'` const declaration fragile | ✅ Fixed |
-| 8 | 🟡 MED  | Getkey route không validate `source` whitelist | ✅ Fixed |
-| 9 | 🟡 MED  | CheckpointModal token state trong race condition | ✅ Fixed |
-| 10 | 🟢 LOW | Work.ink API key placeholder còn trong config (id field) | ✅ Fixed |
+| 2 | 🔴 CRITICAL | Checkpoint bypass: user click Start + đóng tab là tự tick done (state trong localStorage) | ✅ Fixed (server-side callbackAt) |
+| 3 | 🟠 HIGH | Renew flow chỉ accept server-issued tokens nhưng modal issue client-side | ✅ Fixed |
+| 4 | 🟠 HIGH | In-memory storage mất khi Vercel cold start | ✅ Fixed (Upstash Redis) |
+| 5 | 🟠 HIGH | LootLabs API key missing trong env | ✅ Fixed (env.example + .env.local) |
+| 6 | 🟠 HIGH | LootLabs response parser không handle `message[]` shape | ✅ Fixed |
+| 7 | 🟠 HIGH | HWID mismatch giữa web (UUID) và Lua (RbxAnalytics) → JWT free key luôn bị reject | ✅ Fixed |
+| 8 | 🟡 MED  | `/api/admin` `case 'logs'` const declaration fragile | ✅ Fixed |
+| 9 | 🟡 MED  | Getkey route không validate `source` whitelist | ✅ Fixed |
+| 10 | 🟡 MED  | CheckpointModal token state trong race condition | ✅ Fixed |
+| 11 | 🟢 LOW | Work.ink API key placeholder còn trong config (id field) | ✅ Fixed |
+| 12 | 🟢 LOW | checkkey.lua undefined CONFIG URLs (KEY_CHECK_URL, HWID_RESET_URL, ...) | ✅ Fixed |
 
 ---
 
 ## Bug 1 — CRITICAL: `expiresAt` undefined
+
+**File:** `web/src/app/api/getkey/route.ts`
+**Triệu chứng:** Mọi POST request đến `/api/getkey` sẽ 500 (TypeScript compile pass, nhưng runtime ReferenceError).
+**Nguyên nhân:** Sau khi parse `body`, code không tính `expiresAt` mà dùng trực tiếp trong `SignJWT` claims → `Cannot find name 'expiresAt'`.
+**Fix:**
+```diff
++ const now = Date.now();
++ const expiresAt = now + ttlHours * 60 * 60 * 1000;
+  const token = await new SignJWT({
+    ...
+    expires: expiresAt,
+    ...
+  })
+```
+
+**Verify:** Test E2E — issue 2 token → POST `/api/getkey` → trả về JWT hợp lệ.
+
+---
+
+## Bug 2 — CRITICAL SECURITY: Checkpoint bypass
+
+**File:** `web/src/app/getkey/components/CheckpointModal.tsx`, `web/src/lib/db.ts`, `web/src/app/api/getkey/route.ts`
+
+**Triệu chứng:** User click "Start Checkpoint" → modal mở tab ad → user đóng tab ngay lập tức → checkpoint tự tick ✓ trong modal. User chỉ cần 2 lần click là bypass được toàn bộ flow kiếm tiền.
+
+**Nguyên nhân:** Code cũ:
+- Modal pre-issue server token, lưu `{ token, completed: ... }` ngay khi click Start
+- Polling của modal check `localStorage.getItem(LS_KEYS.token(platform, step))` — vì token đã có sẵn, polling thấy ngay → set state `done`
+- `/api/getkey` chỉ check `token exists` trong Redis → vẫn mint key OK
+
+**Fix:** Thêm trường `callbackAt` vào CheckpointToken:
+- Token có 3 trạng thái: `issued` (modal pre-issued) → `callbackReceived` (callback page gọi `/api/checkpoint/complete`) → `consumed` (user dùng trong `/api/getkey`)
+- `/api/getkey` chỉ accept token ở trạng thái `callbackReceived` hoặc `consumed`
+- Modal KHÔNG pre-mark step as done khi thấy token trong localStorage
+- Callback page (linkvertise, workink, lootlabs) sau khi verify với ad platform gọi `POST /api/checkpoint/complete { platform, token }` → server set `callbackAt`
+- Modal polling chỉ mark done khi thấy `completed: true` trong state (chỉ callback page mới set được)
+
+**Verify (production Vercel):**
+```
+[1] Issue 2 tokens                          → success
+[2] Use tokens WITHOUT /complete             → 403 "Checkpoint not completed. Please finish the ad first."
+[3] /complete both tokens (sim callback)     → 200 success
+[4] Use tokens WITH /complete                → 200 + JWT key
+[5] Reuse consumed tokens                    → 403 "Token already used"
+[6] Fake token                               → 403 "Token not found"
+```
 
 **File:** `web/src/app/api/getkey/route.ts`
 **Triệu chứng:** Mọi POST request đến `/api/getkey` sẽ 500 (TypeScript compile pass, nhưng runtime ReferenceError).
