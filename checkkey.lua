@@ -20,15 +20,15 @@ local GITHUB_RAW = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main
 local SUPPORTED_GAMES = {
     [2753915549] = {
         name = "Blox Fruits",
-        scriptPath = "script/PawZHubBF.lua",
+        scriptPath = "games/blox-fruits.lua",
     },
     [74102906764176] = {
         name = "Greedy Growers",
-        scriptPath = "script/PawZHubGG.lua",
+        scriptPath = "games/greedy-growers.lua",
     },
     [72920620366355] = {
         name = "Operation One",
-        scriptPath = "script/games/operation-one.lua",
+        scriptPath = "games/operation-one.lua",
     },
 }
 
@@ -293,10 +293,12 @@ end
 function CheckKeySystem.requestHWIDReset(key)
     key = normalizeKey(key)
     local HttpService = game:GetService("HttpService")
+    local currentHwid = getHWID()
     local body = HttpService:JSONEncode({
-        key    = key,
-        hwid   = getHWID(),
-        userId = game:GetService("Players").LocalPlayer.UserId,
+        key         = key,
+        currentHwid = currentHwid,
+        newHwid     = "pending",
+        userId      = tostring(game:GetService("Players").LocalPlayer.UserId),
     })
     local response = httpPostJson(CONFIG.HWID_RESET_URL, body)
     if response and response ~= "" then

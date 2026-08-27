@@ -28,42 +28,42 @@ local GETKEY_URL     = "https://getpawzhub.vercel.app"
 -- ========================================================
 local SUPPORTED_GAMES = {
     -- ===== Free (no key required) =====
-    [2753915549]      = { name = "Blox Fruits",                  script = "script/PawZHubBF.lua",                  tier = "free",    features = 18  },
-    [74102906764176]  = { name = "Greedy Growers",               script = "script/PawZHubGG.lua",                  tier = "free",    features = 16  },
-    [72920620366355]  = { name = "Operation One",                script = "script/games/operation-one.lua",        tier = "free",    features = 47  },
-    [4616652839]      = { name = "Shindo Life",                  script = "script/games/shindo-life.lua",          tier = "free",    features = 59  },
-    [17017911970]     = { name = "Anime Expeditions",            script = "script/games/anime-expeditions.lua",    tier = "free",    features = 71  },
-    [117612316652]    = { name = "Highschool Hoops",             script = "script/games/highschool-hoops.lua",     tier = "free",    features = 55  },
-    [81128789072]     = { name = "Practical Basketball",         script = "script/games/practical-basketball.lua", tier = "free",    features = 46  },
-    [17625359962]     = { name = "Grow A Chicken Fighter",       script = "script/games/grow-a-chicken.lua",       tier = "free",    features = 57  },
-    [14367520663]     = { name = "Throw A Coin",                 script = "script/games/throw-a-coin.lua",         tier = "free",    features = 25  },
+    [2753915549]      = { name = "Blox Fruits",                  script = "games/blox-fruits.lua",          tier = "free",    features = 45  },
+    [74102906764176]  = { name = "Greedy Growers",               script = "games/greedy-growers.lua",       tier = "free",    features = 13  },
+    [72920620366355]  = { name = "Operation One",                script = "games/operation-one.lua",        tier = "free",    features = 47  },
+    [4616652839]      = { name = "Shindo Life",                  script = "games/shindo-life.lua",          tier = "free",    features = 59  },
+    [17017911970]     = { name = "Anime Expeditions",            script = "games/anime-expeditions.lua",    tier = "free",    features = 71  },
+    [117612316652]    = { name = "Highschool Hoops",             script = "games/highschool-hoops.lua",     tier = "free",    features = 55  },
+    [81128789072]     = { name = "Practical Basketball",         script = "games/practical-basketball.lua", tier = "free",    features = 46  },
+    [17625359962]     = { name = "Grow A Chicken Fighter",       script = "games/grow-a-chicken.lua",       tier = "free",    features = 57  },
+    [14367520663]     = { name = "Throw A Coin",                 script = "games/throw-a-coin.lua",         tier = "free",    features = 25  },
 
     -- ===== Trial tier (any key) =====
-    [18758470869]     = { name = "Bloodlines",                   script = "script/games/bloodlines.lua",           tier = "trial",   features = 81  },
-    [18302485861]     = { name = "VV: Ultimatum",                script = "script/games/vv-ultimatum.lua",         tier = "trial",   features = 153 },
-    [10449761463]     = { name = "The Strongest Battlegrounds",  script = "script/games/tsb.lua",                  tier = "trial",   features = 109 },
-    [18654662233]     = { name = "Grand Alfheim",                script = "script/games/grand-alfheim.lua",        tier = "trial",   features = 105 },
-    [14979512112]     = { name = "Bridger Western",              script = "script/games/bridger.lua",              tier = "trial",   features = 113 },
-    [16782532363]     = { name = "ABA",                          script = "script/games/aba.lua",                  tier = "trial",   features = 153 },
-    [89959550099]     = { name = "Gakuran",                      script = "script/games/gakuran.lua",              tier = "trial",   features = 88  },
-    [6735572261]      = { name = "Pilgrammed",                   script = "script/games/pilgrammed.lua",           tier = "trial",   features = 43  },
-    [14704917953]     = { name = "Dokkodo",                      script = "script/games/dokkodo.lua",              tier = "trial",   features = 54  },
+    [18758470869]     = { name = "Bloodlines",                   script = "games/bloodlines.lua",           tier = "trial",   features = 81  },
+    [18302485861]     = { name = "VV: Ultimatum",                script = "games/vv-ultimatum.lua",         tier = "trial",   features = 153 },
+    [10449761463]     = { name = "The Strongest Battlegrounds",  script = "games/tsb.lua",                  tier = "trial",   features = 109 },
+    [18654662233]     = { name = "Grand Alfheim",                script = "games/grand-alfheim.lua",        tier = "trial",   features = 105 },
+    [14979512112]     = { name = "Bridger Western",              script = "games/bridger.lua",              tier = "trial",   features = 113 },
+    [16782532363]     = { name = "ABA",                          script = "games/aba.lua",                  tier = "trial",   features = 153 },
+    [89959550099]     = { name = "Gakuran",                      script = "games/gakuran.lua",              tier = "trial",   features = 88  },
+    [6735572261]      = { name = "Pilgrammed",                   script = "games/pilgrammed.lua",           tier = "trial",   features = 43  },
+    [14704917953]     = { name = "Dokkodo",                      script = "games/dokkodo.lua",              tier = "trial",   features = 54  },
 
     -- ===== Monthly tier =====
-    [131079272918660] = { name = "Devil Hunter",                 script = "script/games/devil-hunter.lua",         tier = "monthly", features = 95  },
-    [5571328985]      = { name = "Anime Battle (Bloodlines Pro)", script = "script/games/bloodlines.lua",         tier = "monthly", features = 81  },
-    [4588604953]      = { name = "Criminality",                  script = "script/games/criminality.lua",          tier = "monthly", features = 71  },
-    [99449877692519]  = { name = "Bridger Western (Pro)",        script = "script/games/bridger.lua",              tier = "monthly", features = 113 },
-    [16361990076]     = { name = "Grand Alfheim (Pro)",          script = "script/games/grand-alfheim.lua",        tier = "monthly", features = 105 },
-    [13358463560]     = { name = "Asura",                        script = "script/games/asura.lua",                tier = "monthly", features = 54  },
-    [91792475213200]  = { name = "Above The Rim",                script = "script/games/above-the-rim.lua",        tier = "monthly", features = 49  },
-    [86544322519715]  = { name = "Horse Racing Legends",         script = "script/games/horse-racing.lua",         tier = "monthly", features = 22  },
-    [100096058035179] = { name = "MS:KEN",                       script = "script/games/ms-ken.lua",               tier = "monthly", features = 55  },
-    [18852831741]     = { name = "Ryujin",                       script = "script/games/ryujin.lua",               tier = "monthly", features = 57  },
-    [17070462969]     = { name = "Voxel Destruct",               script = "script/games/voxel-destruct.lua",       tier = "monthly", features = 26  },
-    [77649408247578]  = { name = "Dungeon Quest Reborn",         script = "script/games/dungeon-quest.lua",        tier = "monthly", features = 25  },
-    [13927562399]     = { name = "Havoc",                        script = "script/games/havoc.lua",                tier = "monthly", features = 49  },
-    [97598239454123]  = { name = "Grow a Garden 2",              script = "script/games/grow-garden-2.lua",        tier = "monthly", features = 16  },
+    [131079272918660] = { name = "Devil Hunter",                 script = "games/devil-hunter.lua",         tier = "monthly", features = 95  },
+    [5571328985]      = { name = "Anime Battle (Bloodlines Pro)", script = "games/bloodlines.lua",         tier = "monthly", features = 81  },
+    [4588604953]      = { name = "Criminality",                  script = "games/criminality.lua",          tier = "monthly", features = 71  },
+    [99449877692519]  = { name = "Bridger Western (Pro)",        script = "games/bridger.lua",              tier = "monthly", features = 113 },
+    [16361990076]     = { name = "Grand Alfheim (Pro)",          script = "games/grand-alfheim.lua",        tier = "monthly", features = 105 },
+    [13358463560]     = { name = "Asura",                        script = "games/asura.lua",                tier = "monthly", features = 54  },
+    [91792475213200]  = { name = "Above The Rim",                script = "games/above-the-rim.lua",        tier = "monthly", features = 49  },
+    [86544322519715]  = { name = "Horse Racing Legends",         script = "games/horse-racing.lua",         tier = "monthly", features = 22  },
+    [100096058035179] = { name = "MS:KEN",                       script = "games/ms-ken.lua",               tier = "monthly", features = 55  },
+    [18852831741]     = { name = "Ryujin",                       script = "games/ryujin.lua",               tier = "monthly", features = 57  },
+    [17070462969]     = { name = "Voxel Destruct",               script = "games/voxel-destruct.lua",       tier = "monthly", features = 26  },
+    [77649408247578]  = { name = "Dungeon Quest Reborn",         script = "games/dungeon-quest.lua",        tier = "monthly", features = 25  },
+    [13927562399]     = { name = "Havoc",                        script = "games/havoc.lua",                tier = "monthly", features = 49  },
+    [97598239454123]  = { name = "Grow a Garden 2",              script = "games/grow-garden-2.lua",        tier = "monthly", features = 16  },
 }
 
 local TIER_LEVEL = { none=0, free=1, trial=2, monthly=3, lifetime=4 }
@@ -165,7 +165,7 @@ local function main()
             return
         end
         -- Verify key with backend
-        local apiLib, apiErr = loadModule("script/lib/api.lua")
+        local apiLib, apiErr = loadModule("lib/api.lua")
         if not apiLib then
             notify("PawZHub — Error", "Failed to load API: " .. tostring(apiErr), 8)
             warn_("API load failed: " .. tostring(apiErr))
@@ -203,7 +203,7 @@ local function main()
     local libs = {}
     local libNames = { "ui", "notifications", "esp", "combat", "utility", "basketball" }
     for _, name in ipairs(libNames) do
-        local lib, err = loadModule("script/lib/" .. name .. ".lua")
+        local lib, err = loadModule("lib/" .. name .. ".lua")
         if not lib then
             warn_("Lib " .. name .. " unavailable: " .. tostring(err) .. " (skipping)")
             -- continue; some libs are optional
