@@ -26,6 +26,10 @@ local SUPPORTED_GAMES = {
         name = "Greedy Growers",
         scriptPath = "script/PawZHubGG.lua",
     },
+    [72920620366355] = {
+        name = "Operation One",
+        scriptPath = "script/games/operation-one.lua",
+    },
 }
 
 local CONFIG = {

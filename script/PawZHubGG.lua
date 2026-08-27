@@ -4661,20 +4661,339 @@ local function CreateGUI()
     end)
 end
 
-CreateGUI()
+local function StartMainUI()
+    CreateGUI()
+    HubInstance.Config = Config
+    HubInstance.FeatureEngine = FeatureEngine
+    HubInstance.ServerHop = ServerHop
+    HubInstance:ForceAllFeaturesOff(Config)
+    pcall(function()
+        if FeatureEngine and FeatureEngine.Stop then FeatureEngine:Stop() end
+    end)
+    pcall(function()
+        if ServerHop then ServerHop.Active = false end
+    end)
+    pcall(function()
+        Toast:Show("PawZHub ready - all features OFF", "ok")
+    end)
+end
 
--- Bind refs for next re-exec Unload + always start with ALL autos OFF
-HubInstance.Config = Config
-HubInstance.FeatureEngine = FeatureEngine
-HubInstance.ServerHop = ServerHop
-HubInstance:ForceAllFeaturesOff(Config)
-pcall(function()
-    if FeatureEngine and FeatureEngine.Stop then FeatureEngine:Stop() end
-end)
-pcall(function()
-    if ServerHop then ServerHop.Active = false end
-end)
+-- ========== KEY INPUT UI (test version) ==========
+do
+    local SITE_URL = "https://getpawzhub.vercel.app"
+    local KEY_CHECK_URL = SITE_URL .. "/api/verifykey"
+    local GET_KEY_URL = SITE_URL .. "/getkey"
 
-pcall(function()
-    Toast:Show("PawZHub ready - all features OFF", "ok")
-end)
+    local playerGui = Player:WaitForChild("PlayerGui")
+    local oldGui = playerGui:FindFirstChild("PawZHubKeyInput")
+    if oldGui then oldGui:Destroy() end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "PawZHubKeyInput"
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    screenGui.IgnoreGuiInset = true
+    screenGui.Parent = playerGui
+
+    local dim = Instance.new("Frame")
+    dim.Size = UDim2.new(1, 0, 1, 0)
+    dim.BackgroundColor3 = Color3.new(0, 0, 0)
+    dim.BackgroundTransparency = 0.6
+    dim.BorderSizePixel = 0
+    dim.Parent = screenGui
+
+    local WIN_W, WIN_H = 360, 320
+    local window = Instance.new("Frame")
+    window.Size = UDim2.new(0, 0, 0, 0)
+    window.Position = UDim2.new(0.5, -WIN_W / 2, 0.5, -WIN_H / 2)
+    window.BackgroundColor3 = Theme.bgDark or Color3.fromRGB(14, 14, 14)
+    window.BorderSizePixel = 0
+    window.ClipsDescendants = true
+    window.Active = true
+    window.Parent = screenGui
+
+    local wc = Instance.new("UICorner")
+    wc.CornerRadius = UDim.new(0, 10)
+    wc.Parent = window
+    local ws = Instance.new("UIStroke")
+    ws.Color = Theme.border or Color3.fromRGB(48, 48, 48)
+    ws.Thickness = 1
+    ws.Parent = window
+
+    -- Header
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 40)
+    header.BackgroundColor3 = Theme.card or Color3.fromRGB(22, 22, 22)
+    header.BorderSizePixel = 0
+    header.Parent = window
+
+    local hc = Instance.new("UICorner")
+    hc.CornerRadius = UDim.new(0, 10)
+    hc.Parent = header
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -32, 1, 0)
+    title.Position = UDim2.new(0, 16, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "PawZHub — Key Input"
+    title.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+    title.TextSize = 14
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 28, 0, 28)
+    closeBtn.Position = UDim2.new(1, -36, 0, 6)
+    closeBtn.BackgroundColor3 = Theme.card or Color3.fromRGB(22, 22, 22)
+    closeBtn.BackgroundTransparency = 0.5
+    closeBtn.Text = "×"
+    closeBtn.TextColor3 = Theme.textMuted or Color3.fromRGB(120, 120, 120)
+    closeBtn.TextSize = 18
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.AutoButtonColor = false
+    closeBtn.Parent = header
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 6)
+    cc.Parent = closeBtn
+    closeBtn.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+    end)
+
+    -- Body
+    local body = Instance.new("Frame")
+    body.Size = UDim2.new(1, -32, 1, -52)
+    body.Position = UDim2.new(0, 16, 0, 44)
+    body.BackgroundTransparency = 1
+    body.Parent = window
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, 0, 0, 16)
+    statusLabel.Position = UDim2.new(0, 0, 0, 0)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Enter your PawZHub key"
+    statusLabel.TextColor3 = Theme.textMuted or Color3.fromRGB(120, 120, 120)
+    statusLabel.TextSize = 11
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+    statusLabel.Parent = body
+
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(1, 0, 0, 32)
+    input.Position = UDim2.new(0, 0, 0, 22)
+    input.BackgroundColor3 = Theme.card or Color3.fromRGB(22, 22, 22)
+    input.Text = ""
+    input.PlaceholderText = "Paste your key (eyJ... or PH....)"
+    input.PlaceholderColor3 = Theme.textMuted or Color3.fromRGB(120, 120, 120)
+    input.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+    input.TextSize = 12
+    input.Font = Enum.Font.Code
+    input.ClearTextOnFocus = false
+    input.BorderSizePixel = 0
+    input.Parent = body
+    local ic = Instance.new("UICorner")
+    ic.CornerRadius = UDim.new(0, 6)
+    ic.Parent = input
+    local istroke = Instance.new("UIStroke")
+    istroke.Color = Theme.border or Color3.fromRGB(48, 48, 48)
+    istroke.Thickness = 1
+    istroke.Parent = input
+
+    local verifyBtn = Instance.new("TextButton")
+    verifyBtn.Size = UDim2.new(1, 0, 0, 32)
+    verifyBtn.Position = UDim2.new(0, 0, 0, 62)
+    verifyBtn.BackgroundColor3 = Theme.accent1 or Color3.fromRGB(255, 255, 255)
+    verifyBtn.Text = "Verify"
+    verifyBtn.TextColor3 = Theme.bgDark or Color3.fromRGB(14, 14, 14)
+    verifyBtn.TextSize = 13
+    verifyBtn.Font = Enum.Font.GothamBold
+    verifyBtn.AutoButtonColor = false
+    verifyBtn.BorderSizePixel = 0
+    verifyBtn.Parent = body
+    local vc = Instance.new("UICorner")
+    vc.CornerRadius = UDim.new(0, 6)
+    vc.Parent = verifyBtn
+
+    -- Get Key + Discord row
+    local linkRow = Instance.new("Frame")
+    linkRow.Size = UDim2.new(1, 0, 0, 28)
+    linkRow.Position = UDim2.new(0, 0, 0, 102)
+    linkRow.BackgroundTransparency = 1
+    linkRow.Parent = body
+
+    local getKeyBtn = Instance.new("TextButton")
+    getKeyBtn.Size = UDim2.new(0.5, -4, 1, 0)
+    getKeyBtn.BackgroundColor3 = Theme.card or Color3.fromRGB(22, 22, 22)
+    getKeyBtn.Text = "Get Key"
+    getKeyBtn.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+    getKeyBtn.TextSize = 12
+    getKeyBtn.Font = Enum.Font.GothamBold
+    getKeyBtn.AutoButtonColor = false
+    getKeyBtn.BorderSizePixel = 0
+    getKeyBtn.Parent = linkRow
+    local gk = Instance.new("UICorner")
+    gk.CornerRadius = UDim.new(0, 6)
+    gk.Parent = getKeyBtn
+    local gks = Instance.new("UIStroke")
+    gks.Color = Theme.border or Color3.fromRGB(48, 48, 48)
+    gks.Thickness = 1
+    gks.Parent = getKeyBtn
+    getKeyBtn.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard(GET_KEY_URL)
+            statusLabel.Text = "Get Key URL copied!"
+            statusLabel.TextColor3 = Theme.success or Color3.fromRGB(74, 222, 128)
+        else
+            statusLabel.Text = GET_KEY_URL
+            statusLabel.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+        end
+    end)
+
+    local discordBtn = Instance.new("TextButton")
+    discordBtn.Size = UDim2.new(0.5, -4, 1, 0)
+    discordBtn.Position = UDim2.new(0.5, 4, 0, 0)
+    discordBtn.BackgroundColor3 = Theme.card or Color3.fromRGB(22, 22, 22)
+    discordBtn.Text = "Discord"
+    discordBtn.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+    discordBtn.TextSize = 12
+    discordBtn.Font = Enum.Font.GothamBold
+    discordBtn.AutoButtonColor = false
+    discordBtn.BorderSizePixel = 0
+    discordBtn.Parent = linkRow
+    local dc = Instance.new("UICorner")
+    dc.CornerRadius = UDim.new(0, 6)
+    dc.Parent = discordBtn
+    local ds = Instance.new("UIStroke")
+    ds.Color = Theme.border or Color3.fromRGB(48, 48, 48)
+    ds.Thickness = 1
+    ds.Parent = discordBtn
+    discordBtn.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard("https://discord.gg/pawzhub")
+            statusLabel.Text = "Discord URL copied!"
+            statusLabel.TextColor3 = Theme.success or Color3.fromRGB(74, 222, 128)
+        else
+            statusLabel.Text = "discord.gg/pawzhub"
+            statusLabel.TextColor3 = Theme.text or Color3.fromRGB(255, 255, 255)
+        end
+    end)
+
+    -- Footer
+    local footer = Instance.new("TextLabel")
+    footer.Size = UDim2.new(1, 0, 0, 12)
+    footer.Position = UDim2.new(0, 0, 1, -16)
+    footer.BackgroundTransparency = 1
+    footer.Text = "v" .. (SCRIPT_VERSION or "1.0")
+    footer.TextColor3 = Theme.textMuted or Color3.fromRGB(120, 120, 120)
+    footer.TextSize = 9
+    footer.Font = Enum.Font.Gotham
+    footer.TextXAlignment = Enum.TextXAlignment.Center
+    footer.Parent = body
+
+    -- HWID helper
+    local function getHWID()
+        local components = {}
+        pcall(function()
+            local cid = game:GetService("RbxAnalyticsService"):GetClientId()
+            if cid and cid ~= "" then table.insert(components, cid) end
+        end)
+        table.insert(components, string.format("%d:%d", Player.UserId, Player.AccountAge))
+        local h = 2166136261
+        local combined = table.concat(components, "|")
+        for i = 1, #combined do
+            h = bit32.bxor(h, string.byte(combined, i))
+            h = (h * 16777619) % 4294967296
+        end
+        return string.format("%08X", h)
+    end
+
+    -- HTTP POST helper
+    local function httpPostJson(url, jsonBody)
+        local headers = { ["Content-Type"] = "application/json" }
+        local ok, resp = pcall(function()
+            return HttpService:PostAsync(url, jsonBody, Enum.HttpContentType.ApplicationJson, false, headers)
+        end)
+        if ok and resp and resp ~= "" then return resp end
+        if type(request) == "function" then
+            ok, resp = pcall(function()
+                return request({ Url = url, Method = "POST", Headers = headers, Body = jsonBody })
+            end)
+            if ok and type(resp) == "table" and resp.StatusCode and resp.StatusCode < 400 then
+                return resp.Body or resp.body or ""
+            end
+        end
+        if syn and type(syn.request) == "function" then
+            ok, resp = pcall(function()
+                return syn.request({ Url = url, Method = "POST", Headers = headers, Body = jsonBody })
+            end)
+            if ok and type(resp) == "table" and resp.StatusCode and resp.StatusCode < 400 then
+                return resp.Body or resp.body or ""
+            end
+        end
+        return nil
+    end
+
+    local function doVerify()
+        local rawKey = input.Text
+        if not rawKey or rawKey:match("^%s*$") then
+            statusLabel.Text = "Enter a key first"
+            statusLabel.TextColor3 = Theme.danger or Color3.fromRGB(248, 113, 113)
+            return
+        end
+        statusLabel.Text = "Verifying..."
+        statusLabel.TextColor3 = Theme.textMuted or Color3.fromRGB(120, 120, 120)
+        verifyBtn.Text = "Verifying..."
+        verifyBtn.Active = false
+        input.Active = false
+
+        task.spawn(function()
+            local key = rawKey:match("^%s*(.-)%s*$") or rawKey
+            local requestData = {
+                key = key,
+                hwid = getHWID(),
+                userId = Player.UserId,
+                username = Player.Name,
+                gameId = game.PlaceId,
+                version = SCRIPT_VERSION or "1.0",
+                timestamp = os.time(),
+            }
+            local body = HttpService:JSONEncode(requestData)
+            local response = httpPostJson(KEY_CHECK_URL, body)
+
+            if response and response ~= "" then
+                local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
+                if ok and type(data) == "table" and data.valid then
+                    -- Key verified: close key UI and start main script
+                    statusLabel.Text = "Verified!"
+                    statusLabel.TextColor3 = Theme.success or Color3.fromRGB(74, 222, 128)
+                    task.wait(0.5)
+                    screenGui:Destroy()
+                    StartMainUI()
+                    return
+                else
+                    statusLabel.Text = (data and data.message) or "Invalid key"
+                    statusLabel.TextColor3 = Theme.danger or Color3.fromRGB(248, 113, 113)
+                end
+            else
+                statusLabel.Text = "Server unreachable"
+                statusLabel.TextColor3 = Theme.danger or Color3.fromRGB(248, 113, 113)
+            end
+
+            verifyBtn.Text = "Verify"
+            verifyBtn.Active = true
+            input.Active = true
+        end)
+    end
+
+    verifyBtn.MouseButton1Click:Connect(doVerify)
+    input.FocusLost:Connect(function(enterPressed)
+        if enterPressed then doVerify() end
+    end)
+
+    -- Animate window open
+    task.spawn(function()
+        TweenService:Create(window, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, WIN_W, 0, WIN_H),
+        }):Play()
+    end)
+end
