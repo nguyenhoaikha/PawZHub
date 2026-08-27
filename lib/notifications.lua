@@ -254,7 +254,7 @@ function Toast.Show(message, kind, duration)
     msgLbl.Size            = UDim2.new(1, -20, 1, -12)
     msgLbl.Text            = message
     msgLbl.TextSize        = 13
-    msgLbl.Font            = Enum.Font.GothamSemiBold
+    msgLbl.Font            = Enum.Font.GothamBold
     msgLbl.TextColor3      = T.Text
     msgLbl.TextXAlignment  = Enum.TextXAlignment.Left
     msgLbl.TextYAlignment  = Enum.TextYAlignment.Top
