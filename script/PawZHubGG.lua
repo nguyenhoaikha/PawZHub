@@ -79,22 +79,6 @@ function HubInstance:ForceAllFeaturesOff(cfg)
     cfg.AutoServerHop = false
     cfg.AntiAFK = false
     cfg.SpeedEnabled = false
-    self.FailStreak = 0
-    self.FailStreaks = {}
-    self.CurrentAction = nil
-    self.Busy = false
-    self.FertBusy = false
-    self.BuyBusy = false
-    self.FeedBusy = false
-    -- Also clear FeatureEngine locks if present
-    local eng = self.FeatureEngine
-    if type(eng) == "table" then
-        eng.Busy = false
-        eng.BuyBusy = false
-        eng.FertBusy = false
-        eng.FeedBusy = false
-        eng.CurrentAction = nil
-    end
 end
 
 function HubInstance:Unload()
@@ -194,16 +178,14 @@ local Config = {
     AutoBuy = false,
     BuyAll = true,           -- true = buy every seed prompt
     BuyFreeOnly = false,     -- if true, only buy seeds that say FREE
-    BuyInterval = 0.18,
-    BuyPerCycle = 8,         -- how many seeds to buy each cycle (sweep conveyor)
-    BuySortMode = "path",    -- path = sweep conveyor; smart | nearest | balanced | path
+    BuyInterval = 0.35,
+    BuyPerCycle = 3,         -- how many seeds to buy each cycle
+    BuySortMode = "smart",   -- smart | nearest | balanced
     BuyRange = 9999,         -- map-wide buy (remote fire + optional TP)
     BuySkipSoldOut = true,   -- skip sold out / unavailable
     BuyPreferFree = false,   -- among matches, free seeds first
-    BuyTeleport = true,      -- TP along conveyor; return home only after full batch
+    BuyTeleport = true,      -- TP to seed if server needs real proximity
     BuyConveyorOnly = true,  -- only market/conveyor belt seeds (not home free stands)
-    BuyStayOnPath = true,    -- buy entire path before returning to original position
-    BuyFireGap = 0.15,       -- real gap between each seed fire (not ghost)
 
     SelectedSeeds = {        -- only used when BuyAll = false
         -- Common
@@ -247,7 +229,8 @@ local Config = {
     KeepCoinReserve = 0,
     -- Smart options
     SmartBuy = true,
-    HarvestOnlyGrown = false,  -- false=harvest when mult missing; true=require readable mult
+    BuyTeleport = true,
+    HarvestOnlyGrown = false,  -- harvest even if mult text not read
     CollectFruits = true,
     CollectDead = true,
     PlantRange = 80,
@@ -263,6 +246,7 @@ local Config = {
     SellInterval = 1.2,
     -- Deep features
     AutoRebirth = false,
+    AutoFertilizer = false,
     MinRarity = 0,             -- 0=any, 1=Rare+, 2=Epic+, 3=Legendary+, 4=Mythic+, 5=Celestial+, 6=Secret+, 7=Divine
     -- Pets (Greedy Growers)
     OwnPlotOnly = true,        -- never plant/harvest/collect/TP on other players' plots
@@ -274,7 +258,7 @@ local Config = {
     FeedMaxEffects = 1,        -- only fruits with <= this many mutations/effects
     EggRange = 40,
     AntiAFK = true,
-    WalkSpeed = 28,            -- used when SpeedEnabled; restored to 16 when off
+    WalkSpeed = 16,
     SpeedEnabled = false,
     -- UI / Settings
     Language = "en",           -- "en" | "vi"
@@ -288,7 +272,7 @@ local Config = {
     StopOnFullInventory = true,
     MaxPromptFails = 8,
     -- Range / rarity UI
-    MaxPromptDistance = 150,
+    MaxPromptDistance = 80,
     -- Fertilizer
     FertilizerPreferNear = true,
     -- Performance
@@ -296,11 +280,12 @@ local Config = {
     PerformanceMode = true, -- less lag when many features ON
 }
 
-local SCRIPT_VERSION = "1.0.0"
+local SCRIPT_VERSION = "1.6.2"
 local WEBSITE_URL = "https://getpawzhub.vercel.app/"
-local CHANGELOG = [[v1.0.0
-• PawZHub Greedy Growers — stable logic build
-• Unified version identity: 1.0.0
+local CHANGELOG = [[v1.6.2
+• Website link: getpawzhub.vercel.app
+v1.6.1
+• Rename PawZHub + Home profile
 ]]
 
 -- ========== i18n ==========
@@ -617,52 +602,12 @@ function ConfigIO:Save()
         end
     end)
     if not body then body = encodeJSON(data) end
-    local saved = false
     pcall(function()
         if isfolder and not isfolder("PawZHub") then makefolder("PawZHub") end
-        if writefile then
-            writefile(CONFIG_PATH, body)
-            saved = isfile and isfile(CONFIG_PATH) or true
-        end
+        if writefile then writefile(CONFIG_PATH, body) end
     end)
-    Toast:Show(T(saved and "toast_saved" or "toast_cfg_fail"), saved and "ok" or "warn")
-    return saved
-end
-
-local function ValidateConfig()
-    local defaults = {
-        BuyInterval = 0.18, BuyPerCycle = 8, BuyRange = 9999, FarmRange = 150,
-        PlantRange = 80, SellRange = 80, MaxPromptDistance = 150,
-        HarvestMultiplier = 2, HarvestPerCycle = 4, PlantPerCycle = 3,
-        CollectPerCycle = 5, HarvestInterval = 0.4, PlantInterval = 0.45,
-        CollectInterval = 0.4, SellInterval = 1.2, FertilizerType = "Basic",
-        MinRarity = 0, WalkSpeed = 28, FeedPetRange = 45, FeedMaxFruits = 8,
-        FeedMaxEffects = 1, EggRange = 40, UIScale = 1, UIOpacity = 0,
-        MaxPlayers = 1, MaxPromptFails = 8, BuyFireGap = 0.15
-    }
-    for k, fallback in pairs(defaults) do
-        if type(Config[k]) ~= type(fallback) then Config[k] = fallback end
-    end
-    Config.BuyInterval = math.clamp(Config.BuyInterval, 0.08, 2.0)
-    Config.BuyPerCycle = math.clamp(math.floor(Config.BuyPerCycle), 1, 16)
-    Config.BuyFireGap = math.clamp(tonumber(Config.BuyFireGap) or 0.15, 0.08, 0.5)
-    Config.BuyRange = math.max(20, tonumber(Config.BuyRange) or defaults.BuyRange)
-    if Config.BuyStayOnPath == nil then Config.BuyStayOnPath = true end
-    Config.FarmRange = math.clamp(math.floor(Config.FarmRange), 20, 200)
-    Config.MaxPromptDistance = math.clamp(math.floor(Config.MaxPromptDistance), 20, 200)
-    Config.PlantRange = math.clamp(math.floor(Config.PlantRange), 20, 200)
-    Config.SellRange = math.clamp(math.floor(Config.SellRange), 20, 200)
-    Config.HarvestMultiplier = math.clamp(tonumber(Config.HarvestMultiplier) or 2, 1, 10)
-    Config.MinRarity = math.clamp(math.floor(Config.MinRarity), 0, 7)
-    Config.UIScale = math.clamp(tonumber(Config.UIScale) or 1, 0.75, 1.25)
-    Config.UIOpacity = math.clamp(tonumber(Config.UIOpacity) or 0, 0, 0.35)
-    if type(Config.SelectedSeeds) ~= "table" then Config.SelectedSeeds = {} end
-    if Config.BuySortMode ~= "smart" and Config.BuySortMode ~= "nearest" and Config.BuySortMode ~= "balanced" then
-        Config.BuySortMode = "smart"
-    end
-    if Config.FertilizerType ~= "Basic" and Config.FertilizerType ~= "Better" and Config.FertilizerType ~= "Premium" and Config.FertilizerType ~= "Super" and Config.FertilizerType ~= "Magic" then
-        Config.FertilizerType = "Basic"
-    end
+    Toast:Show(T("toast_saved"), "ok")
+    return true
 end
 
 function ConfigIO:Load()
@@ -692,7 +637,6 @@ function ConfigIO:Load()
             Config[k] = data[k]
         end
     end
-    ValidateConfig()
     -- re-apply runtime
     pcall(function()
         if Config.AntiAFK then AntiAFK:Start() else AntiAFK:Stop() end
@@ -878,7 +822,7 @@ function ServerHop:FindEmptyServer()
     if self.Checking then return end
     self.Checking = true
 
-    self:ShowNotification("Searching servers ≤" .. tostring(Config.MaxPlayers or 1) .. " player(s)...", Theme.accent2)
+    self:ShowNotification("Searching servers ≤1 player...", Theme.accent2)
 
     local ok, candidates = pcall(function()
         return self:CollectLowPopServers()
@@ -907,7 +851,7 @@ function ServerHop:FindEmptyServer()
         end
     else
         -- NEVER random hop (would land on full servers)
-        self:ShowNotification("No server with ≤" .. tostring(Config.MaxPlayers or 1) .. " player(s) found. Retry later.", Theme.danger)
+        self:ShowNotification("No server with ≤1 player found. Retry later.", Theme.danger)
     end
 end
 
@@ -982,23 +926,14 @@ local function ApplyWalkSpeed()
     pcall(function()
         local hum = Player.Character and Player.Character:FindFirstChildOfClass("Humanoid")
         if hum then
-            if Config.SpeedEnabled then
-                local spd = Config.WalkSpeed or 28
-                if spd <= 16 then spd = 28 end
-                hum.WalkSpeed = spd
-            else
-                hum.WalkSpeed = 16
-            end
+            hum.WalkSpeed = Config.SpeedEnabled and (Config.WalkSpeed or 16) or 16
         end
     end)
 end
-do
-    local conn = Player.CharacterAdded:Connect(function()
-        task.wait(0.5)
-        ApplyWalkSpeed()
-    end)
-    HubInstance:AddConnection(conn)
-end
+Player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    ApplyWalkSpeed()
+end)
 
 
 
@@ -1026,19 +961,13 @@ local FeatureEngine = {
     RecentBuys = {},
     RecentActions = {},
     FailStreak = 0,
-    FailStreaks = {},
-    CurrentAction = nil,
-    LastDispatchAt = 0,
     LastTick = 0,
     LastActionAt = 0,
     TickInterval = 0.35, -- base throttle (raised for less lag)
     MoneyCache = nil,
     MoneyCacheAt = 0,
     _watchInit = false,
-    WatchConnections = {},
     FertBusy = false,
-    FeedBusy = false,
-    BuyBusy = false,
     Phase = 0,
 }
 
@@ -1053,60 +982,78 @@ local RARITY_WEIGHT = {
 }
 
 function FeatureEngine:RefreshCache()
+    -- Prune dead refs; full rescan only when empty/stale
+    local alive = {}
+    for _, p in ipairs(self.PromptCache) do
+        if p and p.Parent and p:IsA("ProximityPrompt") then
+            alive[#alive + 1] = p
+        end
+    end
+    self.PromptCache = alive
+    if #alive > 0 and (tick() - (self.LastCacheRefresh or 0)) < (self.CacheInterval or 5.5) then
+        self.LastCacheRefresh = tick()
+        return
+    end
+
     local list = {}
     local seen = {}
     local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
     local origin = hrp and hrp.Position
-
-    -- Respect the largest active range. A very large BuyRange means map-wide scan.
-    local farmRange = Config.FarmRange or 60
-    local buyRange = Config.BuyRange or 9999
-    local maxDist = math.max(farmRange, Config.MaxPromptDistance or farmRange, 120)
-    if buyRange < 9000 then
-        maxDist = math.max(maxDist, buyRange)
+    local maxDist = math.max((Config.FarmRange or 60) * 2.2, 120)
+    if Config.AutoBuy then
+        maxDist = math.max(maxDist, 250) -- buy may be farther (conveyor)
     end
 
-    local function addPrompt(obj)
-        if not obj or not obj:IsA("ProximityPrompt") or not obj.Enabled or seen[obj] then return end
-        seen[obj] = true
-        if origin then
-            local part = self:GetPromptPart(obj)
-            if part and maxDist < 9000 and (part.Position - origin).Magnitude > maxDist then
-                return
-            end
-        end
-        list[#list + 1] = obj
-    end
-
-    -- Scan Workspace once. This avoids missing prompts hidden under custom containers.
+    -- Prefer named containers (avoid double-scan of entire workspace when possible)
+    local roots = {}
     pcall(function()
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                addPrompt(obj)
-            end
+        for _, name in ipairs({"Plots", "Plot", "Farms", "Market", "Map", "World", "Game", "Seeds", "Conveyor", "Tycoons", "Tycoon"}) do
+            local f = workspace:FindFirstChild(name)
+            if f then roots[#roots + 1] = f end
         end
     end)
+    if #roots == 0 then
+        roots[1] = workspace
+    else
+        -- still include workspace only if few named roots
+        if #roots < 2 then roots[#roots + 1] = workspace end
+    end
 
+    for _, root in ipairs(roots) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") and obj.Enabled and not seen[obj] then
+                seen[obj] = true
+                if origin then
+                    local part = obj.Parent
+                    if part and part:IsA("BasePart") then
+                        if (part.Position - origin).Magnitude <= maxDist then
+                            list[#list + 1] = obj
+                        end
+                    else
+                        list[#list + 1] = obj
+                    end
+                else
+                    list[#list + 1] = obj
+                end
+                if #list >= 220 then break end
+            end
+        end
+        if #list >= 220 then break end
+    end
     self.PromptCache = list
     self.LastCacheRefresh = tick()
 end
 
--- Live prompt tracking with duplicate protection.
+-- Live prompt tracking (smarter than pure interval cache)
 if not FeatureEngine._hooked then
     FeatureEngine._hooked = true
     pcall(function()
-        local added = workspace.DescendantAdded:Connect(function(obj)
-            if obj:IsA("ProximityPrompt") and obj.Parent and obj.Enabled then
-                local exists = false
-                for _, p in ipairs(FeatureEngine.PromptCache) do
-                    if p == obj then exists = true break end
-                end
-                if not exists then
-                    table.insert(FeatureEngine.PromptCache, obj)
-                end
+        workspace.DescendantAdded:Connect(function(obj)
+            if obj:IsA("ProximityPrompt") then
+                table.insert(FeatureEngine.PromptCache, obj)
             end
         end)
-        local removing = workspace.DescendantRemoving:Connect(function(obj)
+        workspace.DescendantRemoving:Connect(function(obj)
             if obj:IsA("ProximityPrompt") then
                 for i = #FeatureEngine.PromptCache, 1, -1 do
                     if FeatureEngine.PromptCache[i] == obj then
@@ -1115,12 +1062,9 @@ if not FeatureEngine._hooked then
                 end
             end
         end)
-        FeatureEngine.WatchConnections = {added, removing}
-        for _, conn in ipairs(FeatureEngine.WatchConnections) do
-            HubInstance:AddConnection(conn)
-        end
     end)
 end
+
 
 function FeatureEngine:TextOf(prompt)
     local a = (prompt.ActionText or ""):lower()
@@ -1278,27 +1222,6 @@ function FeatureEngine:SortBuyList(list)
             local sb = self:SeedPriority(b) / (self:DistanceTo(b) + 1)
             return sa > sb
         end)
-    elseif mode == "path" then
-        -- Order along conveyor: nearest-neighbor chain from player (sweep the belt)
-        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-        local origin = hrp and hrp.Position or Vector3.new()
-        local ordered = {}
-        local remaining = {}
-        for i = 1, #list do remaining[i] = list[i] end
-        local cur = origin
-        while #remaining > 0 do
-            local bestI, bestD = 1, 1e9
-            for i, p in ipairs(remaining) do
-                local pos = self:GetPromptWorldPos(p) or cur
-                local d = (pos - cur).Magnitude
-                if d < bestD then bestD, bestI = d, i end
-            end
-            local pick = table.remove(remaining, bestI)
-            ordered[#ordered + 1] = pick
-            local pos = self:GetPromptWorldPos(pick)
-            if pos then cur = pos end
-        end
-        for i = 1, #ordered do list[i] = ordered[i] end
     else -- smart = rarity first, then distance
         table.sort(list, function(a, b)
             local pa, pb = self:SeedPriority(a), self:SeedPriority(b)
@@ -1309,31 +1232,11 @@ function FeatureEngine:SortBuyList(list)
 end
 
 function FeatureEngine:GetPromptPart(prompt)
-    if not prompt then return nil end
-    local parent = prompt.Parent
-    if parent then
-        if parent:IsA("Attachment") and parent.Parent and parent.Parent:IsA("BasePart") then
-            return parent.Parent
-        end
-        if parent:IsA("BasePart") then return parent end
-        if parent:IsA("BillboardGui") and parent.Adornee then
-            local a = parent.Adornee
-            if a:IsA("BasePart") then return a end
-            if a:IsA("Attachment") and a.Parent and a.Parent:IsA("BasePart") then return a.Parent end
-        end
-        if parent:IsA("Model") then
-            local p = parent.PrimaryPart or parent:FindFirstChildWhichIsA("BasePart", true)
-            if p then return p end
-        end
-    end
-    local inst = parent
+    local inst = prompt.Parent
     while inst and inst ~= workspace do
-        if inst:IsA("Attachment") and inst.Parent and inst.Parent:IsA("BasePart") then
-            return inst.Parent
-        end
         if inst:IsA("BasePart") then return inst end
         if inst:IsA("Model") then
-            local p = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+            local p = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart")
             if p then return p end
         end
         inst = inst.Parent
@@ -1341,181 +1244,56 @@ function FeatureEngine:GetPromptPart(prompt)
     return nil
 end
 
--- True world position of the interaction point (never belt Part center).
-function FeatureEngine:GetPromptWorldPos(prompt)
-    if not prompt then return nil end
-    local function valid(v)
-        return v and v.X == v.X and v.Y == v.Y and v.Z == v.Z
-            and math.abs(v.X) < 1e5 and math.abs(v.Y) < 1e5 and math.abs(v.Z) < 1e5
-    end
-    local parent = prompt.Parent
-    if parent then
-        if parent:IsA("Attachment") then
-            local ok, wp = pcall(function() return parent.WorldPosition end)
-            if ok and valid(wp) then return wp end
-        end
-        if parent:IsA("BasePart") and valid(parent.Position) then
-            return parent.Position
-        end
-        if parent:IsA("BillboardGui") and parent.Adornee then
-            local a = parent.Adornee
-            if a:IsA("Attachment") then
-                local ok, wp = pcall(function() return a.WorldPosition end)
-                if ok and valid(wp) then return wp end
-            elseif a:IsA("BasePart") and valid(a.Position) then
-                return a.Position
-            end
-        end
-        if parent:IsA("Model") then
-            local p = parent.PrimaryPart or parent:FindFirstChildWhichIsA("BasePart", true)
-            if p and valid(p.Position) then return p.Position end
-        end
-    end
-    local inst = parent
-    local fallback = nil
-    while inst and inst ~= workspace do
-        if inst:IsA("Attachment") then
-            local ok, wp = pcall(function() return inst.WorldPosition end)
-            if ok and valid(wp) then return wp end
-        end
-        if inst:IsA("BasePart") and not fallback and valid(inst.Position) then
-            fallback = inst.Position
-        end
-        inst = inst.Parent
-    end
-    return fallback
-end
-
 function FeatureEngine:DistanceTo(prompt)
     local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-    local pos = self:GetPromptWorldPos(prompt)
-    if not hrp or not pos then return 9999 end
-    return (hrp.Position - pos).Magnitude
+    local part = self:GetPromptPart(prompt)
+    if not hrp or not part then return 9999 end
+    return (hrp.Position - part.Position).Magnitude
 end
 
--- Is this seed position safe to teleport to (not void/sky/other map)?
-function FeatureEngine:IsSafeBuyPos(pos, fromPos)
-    if not pos then return false end
-    if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then return false end
-    if math.abs(pos.X) > 1e5 or math.abs(pos.Y) > 1e5 or math.abs(pos.Z) > 1e5 then return false end
-    if fromPos then
-        local flat = Vector3.new(pos.X - fromPos.X, 0, pos.Z - fromPos.Z).Magnitude
-        local dy = math.abs(pos.Y - fromPos.Y)
-        if flat > 280 then return false end
-        if dy > 70 then return false end
-    end
-    return true
-end
-
--- Stand on solid surface near the seed prompt. Returns true if moved or already close enough.
-function FeatureEngine:SafeStandAtPrompt(prompt, hrp)
-    if not prompt or not hrp or Config.BuyTeleport == false then return false end
-    local seedPos = self:GetPromptWorldPos(prompt)
-    if not self:IsSafeBuyPos(seedPos, hrp.Position) then return false end
-
-    local dist = (hrp.Position - seedPos).Magnitude
-    if dist <= 8 then return true end
-
-    local standPos = seedPos + Vector3.new(0, 3, 0)
+function FeatureEngine:Fire(prompt)
+    if not prompt or not prompt.Parent then return false end
+    local ok = false
     pcall(function()
-        local params = RaycastParams.new()
-        params.FilterType = Enum.RaycastFilterType.Exclude
-        if Player.Character then
-            params.FilterDescendantsInstances = { Player.Character }
+        pcall(function()
+            prompt.MaxActivationDistance = 1e9
+            prompt.RequiresLineOfSight = false
+            prompt.HoldDuration = 0
+            prompt.Enabled = true
+        end)
+        -- Try all methods (some games only accept one)
+        if fireproximityprompt then
+            local a = pcall(fireproximityprompt, prompt)
+            local b = pcall(fireproximityprompt, prompt, 1)
+            ok = ok or a or b
         end
-        -- cast from above seed down onto belt / floor
-        local hit = workspace:Raycast(seedPos + Vector3.new(0, 14, 0), Vector3.new(0, -48, 0), params)
-        if hit and hit.Position then
-            local hFlat = Vector3.new(hit.Position.X - seedPos.X, 0, hit.Position.Z - seedPos.Z).Magnitude
-            if hFlat < 20 and math.abs(hit.Position.Y - seedPos.Y) < 25 then
-                standPos = hit.Position + Vector3.new(0, 3, 0)
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(0.03)
+            prompt:InputHoldEnd()
+            ok = true
+        end)
+        if firesignal then
+            pcall(function() firesignal(prompt.Triggered, Players.LocalPlayer) end)
+            pcall(function() firesignal(prompt.PromptButtonHoldBegan, Players.LocalPlayer) end)
+            ok = true
+        end
+        if getconnections then
+            for _, sigName in ipairs({"Triggered", "PromptButtonHoldBegan", "TriggerEnded"}) do
+                local sOk, signal = pcall(function() return prompt[sigName] end)
+                if sOk and signal then
+                    for _, conn in ipairs(getconnections(signal)) do
+                        pcall(function()
+                            if conn.Fire then conn:Fire(Players.LocalPlayer)
+                            elseif conn.Function then conn.Function(Players.LocalPlayer) end
+                        end)
+                    end
+                    ok = true
+                end
             end
         end
     end)
-
-    if not self:IsSafeBuyPos(standPos, hrp.Position) then return false end
-
-    local look = Vector3.new(seedPos.X, standPos.Y, seedPos.Z)
-    pcall(function()
-        hrp.CFrame = CFrame.new(standPos, look)
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end)
-    return true
-end
-
--- opts.fullHold = seed buy (longer hold). Default fast for farm actions.
--- opts.pressKey  = also send keyboard key for ProximityPrompt
-function FeatureEngine:Fire(prompt, opts)
-    opts = opts or {}
-    if not prompt or not prompt.Parent or not prompt:IsA("ProximityPrompt") or not prompt.Enabled then
-        return false
-    end
-
-    local dispatched = false
-    local hold = 0
-    pcall(function() hold = tonumber(prompt.HoldDuration) or 0 end)
-    local fullHold = opts.fullHold == true
-    local holdWait = fullHold and math.max(0.12, hold + 0.08) or math.max(0.03, math.min(hold, 0.08))
-
-    local oldMax, oldLos
-    pcall(function()
-        oldMax = prompt.MaxActivationDistance
-        oldLos = prompt.RequiresLineOfSight
-        if oldMax and oldMax < 28 then
-            prompt.MaxActivationDistance = 28
-        end
-        prompt.RequiresLineOfSight = false
-    end)
-
-    local function dispatch(fn)
-        if type(fn) ~= "function" then return end
-        if pcall(fn) then dispatched = true end
-    end
-
-    if fireproximityprompt then
-        if fullHold then
-            dispatch(function() fireproximityprompt(prompt, math.max(hold, 0.05)) end)
-        end
-        if not dispatched then
-            dispatch(function() fireproximityprompt(prompt) end)
-        end
-    end
-
-    pcall(function()
-        prompt:InputHoldBegin()
-        task.wait(holdWait)
-        prompt:InputHoldEnd()
-        dispatched = true
-    end)
-
-    if (opts.pressKey == true or (fullHold and not fireproximityprompt)) and VirtualInputManager then
-        pcall(function()
-            local key = Enum.KeyCode.E
-            pcall(function()
-                local kb = prompt.KeyboardKeyCode
-                if kb and kb ~= Enum.KeyCode.Unknown then key = kb end
-            end)
-            VirtualInputManager:SendKeyEvent(true, key, false, game)
-            task.wait(fullHold and math.max(0.08, hold) or 0.03)
-            VirtualInputManager:SendKeyEvent(false, key, false, game)
-            dispatched = true
-        end)
-    end
-
-    if not dispatched and firesignal then
-        dispatch(function() firesignal(prompt.Triggered, Players.LocalPlayer) end)
-    end
-
-    pcall(function()
-        if oldMax ~= nil then prompt.MaxActivationDistance = oldMax end
-        if oldLos ~= nil then prompt.RequiresLineOfSight = oldLos end
-    end)
-
-    if dispatched then
-        self.LastDispatchAt = tick()
-    end
-    return dispatched
+    return ok
 end
 
 -- forceTP = true for farm (ignore BuyTeleport flag)
@@ -1527,7 +1305,7 @@ function FeatureEngine:FireNear(prompt, maxDist, forceTP)
         return self:Fire(prompt)
     end
     local dist = (hrp.Position - part.Position).Magnitude
-    local allowTP = (forceTP == true) or (forceTP == nil and Config.FarmTeleport ~= false)
+    local allowTP = forceTP or (Config.FarmTeleport ~= false) or (Config.BuyTeleport ~= false)
     if dist <= maxDist or not allowTP then
         return self:Fire(prompt)
     end
@@ -1548,148 +1326,181 @@ function FeatureEngine:FireNear(prompt, maxDist, forceTP)
     return fired
 end
 
--- Single seed buy (used by batch). Movement is preferred via alreadySettled from batch.
-function FeatureEngine:FireBuy(prompt, opts)
-    opts = opts or {}
-    self.CurrentAction = "buy"
-    if not prompt or not prompt.Parent then return false end
-    if not self:CanAfford(prompt) then return false end
-
-    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-    local seedPos = self:GetPromptWorldPos(prompt)
-    if not seedPos then return false end
-
-    if not opts.alreadySettled and Config.BuyTeleport ~= false and hrp then
-        if not self:IsSafeBuyPos(seedPos, hrp.Position) then return false end
-        if self:DistanceTo(prompt) > 10 then
-            if not self:SafeStandAtPrompt(prompt, hrp) then return false end
-            task.wait(0.12)
-        end
+-- Parse abbreviated money: 12.87Sp, 1.2K, 350, $1.5M ...
+function FeatureEngine:ParseNumber(str)
+    if not str or str == "" then return nil end
+    str = tostring(str):gsub(",", ""):gsub("%$", ""):gsub("%s", "")
+    local num, suf = str:match("^([%d%.]+)([%a]*)$")
+    if not num then return nil end
+    local n = tonumber(num)
+    if not n then return nil end
+    suf = (suf or ""):lower()
+    local mult = 1
+    if suf == "k" then mult = 1e3
+    elseif suf == "m" then mult = 1e6
+    elseif suf == "b" then mult = 1e9
+    elseif suf == "t" then mult = 1e12
+    elseif suf == "qa" or suf == "q" then mult = 1e15
+    elseif suf == "qi" then mult = 1e18
+    elseif suf == "sx" or suf == "s" then mult = 1e21
+    elseif suf == "sp" then mult = 1e24
+    elseif suf == "oc" or suf == "o" then mult = 1e27
+    elseif suf == "no" or suf == "n" then mult = 1e30
+    elseif suf == "dc" then mult = 1e33
     end
-
-    local fired = self:Fire(prompt, { fullHold = true, pressKey = true })
-    if fired then
-        self.LastBuyFire = tick()
-        self:NoteSuccess("buy")
-    else
-        self:NoteFail("buy")
-    end
-    return fired
+    return n * mult
 end
 
--- One trip: walk/TP along conveyor seeds, buy each for real, return home once.
-function FeatureEngine:RunBuyBatch(buyList)
-    if self.BuyBusy or self.Busy then return end
-    if type(buyList) ~= "table" or #buyList == 0 then return end
-
-    self.BuyBusy = true
-    self.Busy = true
-    self.CurrentAction = "buy"
-
-    task.spawn(function()
-        local ok, err = pcall(function()
-            local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            local homeCF = hrp.CFrame
-            local limit = math.max(1, math.min(tonumber(Config.BuyPerCycle) or 8, 16))
-            local gap = math.max(0.1, tonumber(Config.BuyFireGap) or 0.15)
-            local bought, names = 0, {}
-
-            -- Filter to safe, enabled, affordable seeds only
-            local filtered = {}
-            for _, p in ipairs(buyList) do
-                if p and p.Parent and p:IsA("ProximityPrompt") and p.Enabled then
-                    local pos = self:GetPromptWorldPos(p)
-                    if pos and self:IsSafeBuyPos(pos, hrp.Position) and self:CanAfford(p) then
-                        filtered[#filtered + 1] = p
+function FeatureEngine:GetPlayerMoney()
+    local now = tick()
+    if self.MoneyCache ~= nil and (now - (self.MoneyCacheAt or 0)) < 0.6 then
+        return self.MoneyCache
+    end
+    local best = nil
+    pcall(function()
+        local ls = Player:FindFirstChild("leaderstats")
+        if ls then
+            for _, v in ipairs(ls:GetChildren()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("StringValue") then
+                    local nm = (v.Name or ""):lower()
+                    if nm:find("money") or nm:find("cash") or nm:find("coin") or nm:find("gold") or nm == "$" then
+                        local n = tonumber(v.Value) or self:ParseNumber(tostring(v.Value))
+                        if n and (not best or n > best) then best = n end
                     end
                 end
             end
-            if #filtered == 0 then return end
-
-            -- Always path-order for a continuous belt sweep
-            local prevMode = Config.BuySortMode
-            Config.BuySortMode = "path"
-            self:SortBuyList(filtered)
-            Config.BuySortMode = prevMode
-
-            for i = 1, #filtered do
-                if HubInstance.stopped or bought >= limit then break end
-                local p = filtered[i]
-                if not (p and p.Parent and p.Enabled) then
-                    -- skip dead
-                else
-                    hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-                    if not hrp then break end
-
-                    local settled = false
-                    if Config.BuyTeleport ~= false then
-                        local dist = self:DistanceTo(p)
-                        if dist > 9 then
-                            settled = self:SafeStandAtPrompt(p, hrp)
-                            if settled then task.wait(0.12) end
-                        else
-                            settled = true
-                        end
-                    else
-                        settled = self:DistanceTo(p) <= 18
-                    end
-
-                    if settled or Config.BuyTeleport == false then
-                        local success = self:FireBuy(p, {
-                            alreadySettled = true,
-                        })
-                        if success then
-                            bought = bought + 1
-                            self.BuyCount = (self.BuyCount or 0) + 1
-                            local _, _, rawName = self:TextOf(p)
-                            local short = self:CleanSeedName(rawName)
-                            if short ~= "" then names[#names + 1] = short end
-                            task.wait(gap)
-                        else
-                            task.wait(0.04)
-                        end
-                    end
-                end
-            end
-
-            -- Return home once
-            if homeCF and Config.BuyTeleport ~= false then
-                hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-                if hrp and hrp.Parent then
-                    pcall(function()
-                        hrp.CFrame = homeCF
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                    end)
-                end
-            end
-
-            if bought > 0 then
-                self:NoteSuccess("buy")
-                local now = tick()
-                self.LastBuyToast = self.LastBuyToast or 0
-                if now - self.LastBuyToast >= 1.2 then
-                    self.LastBuyToast = now
-                    if #names == 1 then
-                        Toast:Show("Bought " .. names[1], "ok")
-                    else
-                        Toast:Show(string.format("Bought ×%d (path)", bought), "ok")
-                    end
-                end
-            end
-            self.LastBuy = tick()
-        end)
-
-        if not ok then
-            warn("[PawZHub] RunBuyBatch error: ", err)
-        end
-        self.BuyBusy = false
-        self.Busy = false
-        if self.CurrentAction == "buy" then
-            self.CurrentAction = nil
         end
     end)
+    -- GUI fallback only if leaderstats missing (expensive)
+    if best == nil then
+        pcall(function()
+            local pg = Player:FindFirstChild("PlayerGui")
+            if not pg then return end
+            for _, gui in ipairs(pg:GetDescendants()) do
+                if gui:IsA("TextLabel") then
+                    local t = gui.Text or ""
+                    if #t < 24 and t:find("%$") then
+                        local m = t:match("%$%s*([%d%.,]+%a*)")
+                        local n = self:ParseNumber(m)
+                        if n and n > 0 and (not best or n > best) then best = n end
+                    end
+                end
+            end
+        end)
+    end
+    self.MoneyCache = best
+    self.MoneyCacheAt = now
+    return best
+end
+
+function FeatureEngine:GetSeedPrice(prompt)
+    local _, _, text = self:TextOf(prompt)
+    -- FREE
+    if text:find("free") or text:find("$0") then return 0 end
+    -- Nearby billboard / labels
+    local candidates = { text }
+    local part = self:GetPromptPart(prompt)
+    local root = prompt.Parent
+    if root then
+        for _, gui in ipairs(root:GetDescendants()) do
+            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                candidates[#candidates + 1] = (gui.Text or ""):lower()
+            end
+        end
+    end
+    if part then
+        for _, gui in ipairs(part:GetDescendants()) do
+            if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                candidates[#candidates + 1] = (gui.Text or ""):lower()
+            end
+        end
+        -- sibling billboards
+        pcall(function()
+            for _, bb in ipairs(part:GetChildren()) do
+                if bb:IsA("BillboardGui") or bb:IsA("SurfaceGui") then
+                    for _, gui in ipairs(bb:GetDescendants()) do
+                        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                            candidates[#candidates + 1] = (gui.Text or ""):lower()
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    local price = nil
+    for _, t in ipairs(candidates) do
+        if t:find("free") then return 0 end
+        -- $350 or 350$ or price: 1.2k
+        for raw in t:gmatch("%$%s*([%d%.,]+%a*)") do
+            local n = self:ParseNumber(raw)
+            if n and n > 0 then price = price and math.min(price, n) or n end
+        end
+        for raw in t:gmatch("([%d%.,]+%a*)%s*%$") do
+            local n = self:ParseNumber(raw)
+            if n and n > 0 then price = price and math.min(price, n) or n end
+        end
+    end
+    return price -- nil = unknown
+end
+
+function FeatureEngine:CanAfford(prompt)
+    local price = self:GetSeedPrice(prompt)
+    if price == nil then return true end -- unknown: allow
+    if price <= 0 then return true end -- free
+    local money = self:GetPlayerMoney()
+    if money == nil then return true end -- can't read money: allow
+    return money + 0.0001 >= price
+end
+
+function FeatureEngine:CleanSeedName(raw)
+    local s = tostring(raw or ""):lower()
+    s = s:gsub("\n", " "):gsub("%s+", " ")
+    s = s:gsub("^buy%s+", ""):gsub("^purchase%s+", ""):gsub("^claim%s+", "")
+    s = s:gsub("%s+buy$", "")
+    s = s:gsub("seed", "seed")
+    -- title case short
+    s = s:gsub("(%a)([%w_']*)", function(a, b) return a:upper() .. b end)
+    if #s > 18 then s = s:sub(1, 18) .. "…" end
+    return s
+end
+
+function FeatureEngine:FireBuy(prompt)
+    local now = tick()
+    if not self:CanAfford(prompt) then return false end
+
+    local _, _, rawName = self:TextOf(prompt)
+    local key = (rawName or "") .. tostring(self:GetPromptPart(prompt) and self:GetPromptPart(prompt).Position or "")
+    key = key:lower()
+    self.RecentBuys = self.RecentBuys or {}
+    -- Global buy cooldown (anti-lag spam)
+    if self.LastBuyFire and now - self.LastBuyFire < 0.35 then return false end
+    if self.RecentBuys[key] and now - self.RecentBuys[key] < 1.4 then return false end
+    self.RecentBuys[key] = now
+    self.LastBuyFire = now
+
+    local dist = self:DistanceTo(prompt)
+    self:Fire(prompt)
+
+    if dist > 16 and Config.BuyTeleport ~= false then
+        if self.Busy then return true end
+        local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+        local part = self:GetPromptPart(prompt)
+        if hrp and part then
+            self.Busy = true
+            pcall(function()
+                local oldCF = hrp.CFrame
+                hrp.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0))
+                task.wait(0.08)
+                self:Fire(prompt)
+                task.wait(0.06)
+                if hrp and hrp.Parent then
+                    hrp.CFrame = oldCF
+                end
+            end)
+            self.Busy = false
+        end
+    end
+    return true
 end
 
 function FeatureEngine:GetMultiplier(prompt)
@@ -1737,22 +1548,21 @@ function FeatureEngine:IsPlantPrompt(prompt)
     if text:find("feed") or text:find("pick up") or text:find("view") then return false end
     -- Greedy Growers primary
     if text:find("plant seed") then return true end
-    if action:find("plant") and (text:find("seed") or object:find("seed") or object:find("plot") or object:find("soil")) then return true end
-    if text:find("empty") and (text:find("plot") or text:find("soil") or text:find("dirt") or text:find("pad") or text:find("spot")) then return true end
-    if action:find("plant") and not text:find("egg") then return true end
+    if action:find("plant") and (text:find("seed") or object:find("seed") or object:find("plot")) then return true end
+    if text:find("empty") and (text:find("plot") or text:find("soil") or text:find("dirt") or text:find("pad")) then return true end
     return false
 end
 
 function FeatureEngine:IsHarvestPrompt(prompt)
     local action, object, text = self:TextOf(prompt)
+    -- Never seed basket / plant / buy / sell
     if text:find("give seed") or (text:find("give") and text:find("seed")) then return false end
     if text:find("plant seed") or text:find("buy") or text:find("sell") then return false end
-    if text:find("feed") or text:find("equip") or text:find("rebirth") then return false end
-    if action:find("buy") or action:find("plant") or action:find("sell") or action:find("give") or action:find("collect") then return false end
+    if text:find("feed") or text:find("pick up") then return false end
+    if action:find("buy") or action:find("plant") or action:find("sell") or action:find("give") then return false end
     if text:find("fertiliz") or text:find("select fertilizer") then return false end
-    if text:find("seed") and not text:find("harvest") then return false end
-    -- Explicit harvest only (do not match random "2.5x" billboards)
     if action:find("harvest") or object:find("harvest") or text:find("harvest") then return true end
+    if text:find("%d+%.?%d*x") and not text:find("seed") and not text:find("ticket") then return true end
     return false
 end
 
@@ -1760,30 +1570,22 @@ function FeatureEngine:IsCollectPrompt(prompt)
     local action, object, text = self:TextOf(prompt)
     if text:find("give seed") or (text:find("give") and text:find("seed")) then return false end
     if text:find("plant seed") or text:find("buy") or text:find("sell") then return false end
-    if text:find("feed") or text:find("view") or text:find("equip") or text:find("rebirth") then return false end
+    if text:find("feed") or text:find("pick up") or text:find("view") then return false end
     if action:find("buy") or action:find("plant") or action:find("sell") or action:find("harvest") or action:find("give") then return false end
-    if text:find("harvest") or text:find("fertiliz") or text:find("seed") then return false end
+    if text:find("harvest") or text:find("fertiliz") then return false end
     if Config.CollectFruits ~= false then
+        if action:find("pick") or action:find("grab") or action:find("take") then return true end
         if text:find("collect fruit") or text:find("pickup fruit") or text:find("pick up fruit") then return true end
-        if text:find("fruit") and (action:find("collect") or action:find("pick") or action:find("grab") or action:find("take") or action:find("interact")) then
-            return true
-        end
-        if (action:find("pick") or action:find("grab") or action:find("take")) and text:find("fruit") then return true end
-        -- Common GG label: just "Collect" near fruit
-        if action:find("collect") and text:find("fruit") then return true end
+        if text:find("fruit") and (action:find("collect") or action:find("interact") or action:find("pick")) then return true end
+        if text:find("fruit") and not text:find("seed") and not text:find("buy") and not text:find("submit") then return true end
     end
     if Config.CollectDead ~= false then
-        if text:find("dead") or text:find("wilt") or text:find("rotten") or text:find("wither") then
-            return true
-        end
-        if (text:find("clear") or text:find("chop") or text:find("remove")) and (text:find("tree") or text:find("plant") or text:find("crop") or text:find("dead")) then
+        if text:find("dead") or text:find("wilt") or text:find("rot") or text:find("clear")
+            or text:find("remove") or text:find("chop") or text:find("clean") or text:find("destroy") then
             return true
         end
     end
-    if action:find("collect") and not text:find("seed") and not text:find("give") and not text:find("buy") then
-        -- generic collect without seed — allow if not sell/buy context
-        if not text:find("sell") then return true end
-    end
+    if action:find("collect") and not text:find("seed") and not text:find("give") then return true end
     return false
 end
 
@@ -1816,47 +1618,18 @@ function FeatureEngine:IsOwnPlot(prompt)
     local myName = (Player.Name or ""):lower()
     local myId = tostring(Player.UserId or "")
     local display = (Player.DisplayName or ""):lower()
-
-    local others = {}
-    pcall(function()
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= Player then
-                others[#others + 1] = (plr.Name or ""):lower()
-                others[#others + 1] = tostring(plr.UserId or "")
-                local dn = (plr.DisplayName or ""):lower()
-                if dn ~= "" and dn ~= (plr.Name or ""):lower() then
-                    others[#others + 1] = dn
-                end
-            end
-        end
-    end)
-
-    local function isOther(s)
-        if not s or s == "" then return false end
-        if s == myName or s == myId or s == display then return false end
-        for _, o in ipairs(others) do
-            if o ~= "" and s == o then return true end
-        end
-        return false
-    end
-
     local node = prompt
     local sawPlot = false
-    local explicitOwn = false
-    local explicitOther = false
-
     for _ = 1, 16 do
         if not node or node == game then break end
         local n = (node.Name or ""):lower()
-        if n:find("plot", 1, true) or n:find("garden", 1, true) or n:find("farm", 1, true)
-            or n:find("land", 1, true) or n:find("slot", 1, true) then
-            sawPlot = true
+        if n:find("plot", 1, true) or n:find("garden", 1, true) or n:find("farm", 1, true) then sawPlot = true
         end
-        if n == myName or n == myId or (display ~= "" and n == display) then explicitOwn = true end
-        if myName ~= "" and #myName >= 3 and n:find(myName, 1, true) then explicitOwn = true end
-        if myId ~= "" and n:find(myId, 1, true) then explicitOwn = true end
-        if isOther(n) then explicitOther = true end
-
+        if n == myName or n == myId or (display ~= "" and n == display) then
+            return true
+        end
+        if myName ~= "" and n:find(myName, 1, true) then return true end
+        if myId ~= "" and n:find(myId, 1, true) then return true end
         local okAttr, owner = pcall(function()
             return node:GetAttribute("Owner") or node:GetAttribute("OwnerName")
                 or node:GetAttribute("OwnerId") or node:GetAttribute("Player")
@@ -1864,129 +1637,89 @@ function FeatureEngine:IsOwnPlot(prompt)
         end)
         if okAttr and owner ~= nil then
             local s = tostring(owner):lower()
-            if s == myName or s == myId or s == display then
-                explicitOwn = true
-            elseif isOther(s) or (sawPlot and s ~= "" and s ~= myName and s ~= myId and s ~= display) then
-                explicitOther = true
+            if s == myName or s == myId or s == display then return true end
+            -- owned by someone else
+            if sawPlot and s ~= "" and s ~= myName and s ~= myId then
+                return false
             end
         end
-
+        -- ObjectValue / StringValue owner refs
         pcall(function()
             local ov = node:FindFirstChild("Owner") or node:FindFirstChild("Player")
-            if not ov then return end
-            if ov:IsA("ObjectValue") then
-                if ov.Value == Player then
-                    explicitOwn = true
-                elseif ov.Value and ov.Value:IsA("Player") and ov.Value ~= Player then
-                    explicitOther = true
-                end
-            elseif ov:IsA("StringValue") then
-                local s = (ov.Value or ""):lower()
-                if s == myName or s == myId or s == display then
-                    explicitOwn = true
-                elseif isOther(s) then
-                    explicitOther = true
+            if ov then
+                if ov:IsA("ObjectValue") and ov.Value == Player then
+                    sawPlot = true
+                    -- mark owned
+                    node = nil
+                elseif ov:IsA("StringValue") then
+                    local s = (ov.Value or ""):lower()
+                    if s == myName or s == myId then node = nil end
                 end
             end
         end)
-
+        if node == nil then return true end
         node = node.Parent
     end
-
-    if explicitOwn then return true end
-    if explicitOther then return false end
-    -- Greedy Growers often omits Owner attrs; plot folder without foreign owner → allow
-    if sawPlot then return true end
-    -- Not under plot hierarchy: only very local interactions
-    return self:DistanceTo(prompt) <= 28
+    -- Standing on it (own plot gameplay)
+    local d = self:DistanceTo(prompt)
+    if d <= 32 then return true end
+    return false
 end
 
 -- opts.skipOwnCheck = true for sell / shop prompts not on plot
 function FeatureEngine:FireFarm(prompt, maxRange, opts)
     opts = opts or {}
     maxRange = maxRange or Config.FarmRange or 120
-    local action = opts.action or self.CurrentAction or "farm"
-    self.CurrentAction = action
     if not opts.skipOwnCheck and not self:IsOwnPlot(prompt) then
         return false
     end
     local d = self:DistanceTo(prompt)
-    local hardRange = Config.MaxPromptDistance
-    local limit = maxRange
-    if hardRange and hardRange > 0 then
-        limit = math.min(limit, hardRange)
-    end
-    if d > limit then
-        return false
-    end
-
-    local fired
+    self:Fire(prompt)
     if d <= 22 then
-        fired = self:Fire(prompt)
-    elseif Config.FarmTeleport ~= false then
-        fired = self:FireNear(prompt, 12, true)
-    else
-        fired = false
-    end
-
-    if fired then
-        self:NoteSuccess(action)
         return true
     end
-    self:NoteFail(action)
-    return false
+    if (Config.FarmTeleport ~= false) and d <= maxRange then
+        self:FireNear(prompt, 12, true)
+        return true
+    end
+    return d <= maxRange
 end
 
 function FeatureEngine:ShouldHarvest(prompt)
-    local need = Config.HarvestMultiplier or 2
+    if Config.HarvestOnlyGrown == false then return true end
     local mult = self:GetMultiplier(prompt)
+    local need = Config.HarvestMultiplier or 2
     if mult then
-        -- Always respect multiplier threshold when readable
         return mult + 0.001 >= need
     end
-    -- No mult text: skip only if user requires known grown mult
-    if Config.HarvestOnlyGrown == true then
-        return false
-    end
+    -- unknown mult: still harvest (most reliable for this game)
     return true
 end
 
 function FeatureEngine:SafetyBlocked()
     if not Config.SafetyEnabled then return false end
-    local limit = Config.MaxPromptFails or 8
-    for action, streak in pairs(self.FailStreaks or {}) do
-        if streak >= limit then
-            Toast:Show(T("toast_safety") .. " [" .. tostring(action) .. "]", "warn")
-            Config.AutoBuy = false
-            Config.AutoPlant = false
-            Config.AutoHarvest = false
-            Config.AutoCollect = false
-            Config.AutoSell = false
-            Config.AutoFertilizer = false
-            Config.AutoRebirth = false
-            Config.AutoFeedPet = false
-            Config.AutoPlaceEgg = false
-            Config.AutoEquipPet = false
-            self.FailStreaks[action] = 0
-            self.FailStreak = 0
-            self:EnsureRunning()
-            return true
-        end
+    if self.FailStreak >= (Config.MaxPromptFails or 8) then
+        Toast:Show(T("toast_safety"), "warn")
+        Config.AutoBuy = false
+        Config.AutoPlant = false
+        Config.AutoHarvest = false
+        Config.AutoCollect = false
+        Config.AutoSell = false
+        Config.AutoFertilizer = false
+        Config.AutoRebirth = false
+        Config.AutoFeedPet = false
+        self.FailStreak = 0
+        self:EnsureRunning()
+        return true
     end
     return false
 end
 
-function FeatureEngine:NoteFail(action)
-    action = action or self.CurrentAction or "general"
-    self.FailStreaks = self.FailStreaks or {}
-    self.FailStreaks[action] = (self.FailStreaks[action] or 0) + 1
-    self.FailStreak = self.FailStreaks[action]
+function FeatureEngine:NoteFail()
+    self.FailStreak = (self.FailStreak or 0) + 1
 end
 
-function FeatureEngine:NoteSuccess(action)
-    action = action or self.CurrentAction or "general"
-    self.FailStreaks = self.FailStreaks or {}
-    self.FailStreaks[action] = 0
+function FeatureEngine:NoteSuccess()
     self.FailStreak = 0
     self.LastActionAt = tick()
 end
@@ -2038,12 +1771,9 @@ function FeatureEngine:Tick()
     for _, prompt in ipairs(self.PromptCache) do
         if prompt and prompt.Parent and prompt:IsA("ProximityPrompt") and prompt.Enabled then
             alive[#alive + 1] = prompt
-            -- Classify independently (seed buy never enters farm lists)
-            local isWantedSeed = self:IsWantedSeed(prompt)
-            if needBuy and isWantedSeed then
+            if needBuy and self:IsWantedSeed(prompt) then
                 buyList[#buyList + 1] = prompt
-            end
-            if not isWantedSeed then
+            else
                 local d = self:DistanceTo(prompt)
                 if d <= farmRange then
                     if needHarvest and self:IsHarvestPrompt(prompt) then
@@ -2068,7 +1798,6 @@ function FeatureEngine:Tick()
 
     -- 1) HARVEST ready crops (highest priority)
     if needHarvest then
-        self.CurrentAction = "harvest"
         if #harvestList > 0 then
             self:SortByDistance(harvestList)
             local limit = math.clamp(Config.HarvestPerCycle or 3, 1, 8)
@@ -2077,7 +1806,7 @@ function FeatureEngine:Tick()
             for _, p in ipairs(harvestList) do
                 if n >= limit then break end
                 if self:ShouldHarvest(p) then
-                    if self:FireFarm(p, farmRange, {action = "harvest"}) then
+                    if self:FireFarm(p, farmRange) then
                         n = n + 1
                         self.HarvestCount = (self.HarvestCount or 0) + 1
                         farmWorked = true
@@ -2096,7 +1825,6 @@ function FeatureEngine:Tick()
 
     -- 2) COLLECT fruits / dead trees
     if needCollect then
-        self.CurrentAction = "collect"
         if #collectList > 0 then
             self:SortByDistance(collectList)
             local limit = math.clamp(Config.CollectPerCycle or 4, 1, 10)
@@ -2104,7 +1832,7 @@ function FeatureEngine:Tick()
             local n = 0
             for _, p in ipairs(collectList) do
                 if n >= limit then break end
-                if self:FireFarm(p, farmRange, {action = "collect"}) then
+                if self:FireFarm(p, farmRange) then
                     n = n + 1
                     self.CollectCount = (self.CollectCount or 0) + 1
                     farmWorked = true
@@ -2117,7 +1845,6 @@ function FeatureEngine:Tick()
 
     -- 3) PLANT empty plots (Greedy Growers: Plant Seed → SELECT FERTILIZER GUI)
     if needPlant then
-        self.CurrentAction = "plant"
         if #plantList > 0 then
             self:SortByDistance(plantList)
             -- 1 plant/cycle when fertilizer ON (panel can only handle one at a time)
@@ -2132,7 +1859,7 @@ function FeatureEngine:Tick()
                 if ptx:find("give") or ptx:find("basket") then
                     -- skip Give Seed basket
                 elseif self:DistanceTo(p) <= range then
-                    if self:FireFarm(p, range, {action = "plant"}) then
+                    if self:FireFarm(p, range) then
                         n = n + 1
                         self.PlantCount = (self.PlantCount or 0) + 1
                         farmWorked = true
@@ -2171,8 +1898,7 @@ function FeatureEngine:Tick()
     end
 
     -- 4) FERTILIZER GUI — always try to close SELECT FERTILIZER if open
-    if needFert and not self.FertBusy then
-        self.CurrentAction = "fertilizer"
+    if needFert then
         local picked = self:SelectFertilizerGUI()
         if picked then
             self:NoteSuccess()
@@ -2194,21 +1920,12 @@ function FeatureEngine:Tick()
                     break
                 end
             end
-            if chosen and not self.FertBusy then
-                self.FertBusy = true
-                task.spawn(function()
-                    self.CurrentAction = "fertilizer"
-                    if self:FireFarm(chosen, fertRange, {action = "fertilizer"}) then
-                        task.wait(0.25)
-                        if self:SelectFertilizerGUI() then
-                            self:NoteSuccess("fertilizer")
-                        else
-                            self:NoteFail("fertilizer")
-                        end
-                    end
-                    self.LastFert = tick()
-                    self.FertBusy = false
-                end)
+            if chosen and self:FireFarm(chosen, fertRange) then
+                task.wait(0.25)
+                if self:SelectFertilizerGUI() then
+                    self:NoteSuccess()
+                    farmWorked = true
+                end
             end
         end
         self.LastFert = now
@@ -2216,7 +1933,6 @@ function FeatureEngine:Tick()
 
     -- 5) SELL — prefer top-bar SELL GUI (no TP / no other plots)
     if needSell then
-        self.CurrentAction = "sell"
         local sold = false
         pcall(function()
             local pg = Player:FindFirstChild("PlayerGui")
@@ -2238,7 +1954,7 @@ function FeatureEngine:Tick()
             local p = sellList[1]
             local range = Config.SellRange or 80
             -- shop sell is not on garden plot
-            if self:FireFarm(p, range, { skipOwnCheck = true, action = "sell" }) then
+            if self:FireFarm(p, range, { skipOwnCheck = true }) then
                 sold = true
             end
         end
@@ -2255,9 +1971,38 @@ function FeatureEngine:Tick()
         self.LastSell = now
     end
 
-    -- 6) BUY: sweep conveyor path in one trip, return home once (async batch)
-    if needBuy and #buyList > 0 and not self.Busy and not self.BuyBusy then
-        self:RunBuyBatch(buyList)
+    -- 6) BUY (after farm work; still runs if farm idle or always when due)
+    if needBuy and #buyList > 0 and not self.Busy then
+        self:SortBuyList(buyList)
+        local limit = math.max(1, math.min(Config.BuyPerCycle or 1, 5))
+        local bought = 0
+        local names = {}
+        for i = 1, #buyList do
+            if bought >= limit then break end
+            local p = buyList[i]
+            if self:CanAfford(p) then
+                local ok = self:FireBuy(p)
+                if ok then bought = bought + 1
+                    self.BuyCount = (self.BuyCount or 0) + 1
+                    local _, _, rawName = self:TextOf(p)
+                    local short = self:CleanSeedName(rawName)
+                    if short ~= "" then names[#names + 1] = short end
+                    task.wait(0.1)
+                end
+            end
+        end
+        if bought > 0 then
+            self:NoteSuccess()
+            self.LastBuyToast = self.LastBuyToast or 0
+            if now - self.LastBuyToast >= 1.6 then
+                self.LastBuyToast = now
+                if #names == 1 then
+                    Toast:Show("Bought " .. names[1], "ok")
+                else
+                    Toast:Show(string.format("Bought ×%d", bought), "ok")
+                end
+            end
+        end
         self.LastBuy = now
     elseif needBuy then
         self.LastBuy = now
@@ -2265,67 +2010,49 @@ function FeatureEngine:Tick()
 
     -- REBIRTH (slow)
     if Config.AutoRebirth and (now - (self.LastRebirth or 0) >= 4) then
-        self.CurrentAction = "rebirth"
-        local did = false
         for _, prompt in ipairs(alive) do
             if self:IsRebirthPrompt(prompt) then
-                if self:FireFarm(prompt, 40, { skipOwnCheck = true, action = "rebirth" }) then
-                    did = true
-                    self:NoteSuccess("rebirth")
-                end
+                self:FireNear(prompt, 25)
+                self.LastRebirth = now
                 break
             end
         end
-        if not did then
-            pcall(function()
-                local pg = Player:FindFirstChild("PlayerGui")
-                if not pg then return end
-                for _, gui in ipairs(pg:GetDescendants()) do
-                    if gui:IsA("TextButton") or gui:IsA("ImageButton") then
-                        local t = ((gui.Text or "") .. " " .. (gui.Name or "")):lower()
-                        if t:find("rebirth") or t:find("prestige") then
-                            if self:ClickGui(gui) then
-                                did = true
-                                self:NoteSuccess("rebirth")
-                            end
-                            break
-                        end
+        pcall(function()
+            local pg = Player:FindFirstChild("PlayerGui")
+            if not pg then return end
+            for _, gui in ipairs(pg:GetDescendants()) do
+                if gui:IsA("TextButton") or gui:IsA("ImageButton") then
+                    local t = ((gui.Text or "") .. " " .. (gui.Name or "")):lower()
+                    if t:find("rebirth") or t:find("prestige") then
+                        pcall(function() firesignal(gui.MouseButton1Click) end)
+                        self.LastRebirth = now
+                        break
                     end
                 end
-            end)
-        end
-        self.LastRebirth = now -- always advance interval even if nothing found
+            end
+        end)
     end
 
-    -- PETS: Feed hungry pets (async — RunFeedPets yields; never block Heartbeat)
-    if Config.AutoFeedPet and (now - (self.LastFeedPet or 0) >= 2.2) and not self.FeedBusy then
-        self.CurrentAction = "feed"
-        self.LastFeedPet = now
-        self.FeedBusy = true
-        local cache = alive
-        task.spawn(function()
-            local ok, fed = pcall(function() return self:RunFeedPets(cache) end)
-            fed = (ok and fed) or 0
-            if fed > 0 then
-                self:NoteSuccess("feed")
-                local tnow = tick()
-                self.LastFeedToast = self.LastFeedToast or 0
-                if tnow - self.LastFeedToast > 4 then
-                    self.LastFeedToast = tnow
-                    Toast:Show(string.format("Fed pet ×%d", fed), "ok")
-                end
+    -- PETS: Feed hungry pets
+    if Config.AutoFeedPet and (now - (self.LastFeedPet or 0) >= 2.2) then
+        local fed = self:RunFeedPets(alive)
+        if fed > 0 then
+            self:NoteSuccess()
+            self.LastFeedToast = self.LastFeedToast or 0
+            if now - self.LastFeedToast > 4 then
+                self.LastFeedToast = now
+                Toast:Show(string.format("Fed pet ×%d", fed), "ok")
             end
-            self.FeedBusy = false
-        end)
+        end
+        self.LastFeedPet = now
     end
 
     -- PETS: Place / hatch egg
     if Config.AutoPlaceEgg and (now - (self.LastEgg or 0) >= 2.0) then
-        self.CurrentAction = "egg"
         local eRange = Config.EggRange or 40
         for _, prompt in ipairs(alive) do
             if self:IsEggPrompt(prompt) and self:DistanceTo(prompt) <= eRange then
-                if self:FireFarm(prompt, eRange, {action = "egg"}) then
+                if self:FireFarm(prompt, eRange) then
                     self:NoteSuccess()
                     self.LastEggToast = self.LastEggToast or 0
                     if now - self.LastEggToast > 4 then
@@ -2341,11 +2068,10 @@ function FeatureEngine:Tick()
 
     -- PETS: Equip
     if Config.AutoEquipPet and (now - (self.LastPetEquip or 0) >= 3.0) then
-        self.CurrentAction = "equip"
         local did = false
         for _, prompt in ipairs(alive) do
             if self:IsPetEquipPrompt(prompt) and self:DistanceTo(prompt) <= 40 then
-                if self:FireFarm(prompt, 40, {action = "equip"}) then
+                if self:FireFarm(prompt, 40) then
                     did = true
                     self:NoteSuccess()
                     break
@@ -2371,7 +2097,6 @@ function FeatureEngine:Tick()
         end
         self.LastPetEquip = now
     end
-    self.CurrentAction = nil
 end
 
 function FeatureEngine:Start()
@@ -2426,10 +2151,6 @@ function FeatureEngine:Stop()
     self.Running = false
     self.PromptCache = {}
     self.Busy = false
-    self.BuyBusy = false
-    self.FertBusy = false
-    self.FeedBusy = false
-    self.CurrentAction = nil
 end
 
 function FeatureEngine:EnsureRunning()
@@ -2575,7 +2296,7 @@ function FeatureEngine:RunFeedPets(alive)
     if fed == 0 then
         for _, prompt in ipairs(alive) do
             if self:IsFeedPetPrompt(prompt) and self:DistanceTo(prompt) <= range then
-                if self:FireFarm(prompt, range, {action = "feed"}) then
+                if self:FireFarm(prompt, range) then
                     fed = fed + 1
                     task.wait(0.3)
                     self:SelectJunkFruitsForFeed()
@@ -2585,9 +2306,8 @@ function FeatureEngine:RunFeedPets(alive)
         end
     end
 
-    -- 3) Only select fruit after a feed action succeeded.
-    -- The old `(pg and true)` condition was effectively always true whenever PlayerGui existed.
-    if fed > 0 then
+    -- 3) Still try junk fruit if a feed inventory is open
+    if fed > 0 or (pg and true) then
         pcall(function() self:SelectJunkFruitsForFeed() end)
     end
     return fed
@@ -2645,50 +2365,50 @@ end
 -- Click a GUI element (button / frame card) via signal + virtual mouse
 function FeatureEngine:ClickGui(gui)
     if not gui or not gui.Parent then return false end
-
-    local target = nil
-    if gui:IsA("GuiButton") then
-        target = gui
-    else
+    local ok = false
+    local light = Config.PerformanceMode ~= false -- default ON = less lag
+    pcall(function()
+        if gui:IsA("GuiButton") then
+            pcall(function() firesignal(gui.MouseButton1Click) end)
+            pcall(function() firesignal(gui.Activated) end)
+            pcall(function() gui.MouseButton1Click:Fire() end)
+            if not light and getconnections then
+                pcall(function()
+                    for _, conn in ipairs(getconnections(gui.MouseButton1Click)) do
+                        pcall(function()
+                            if conn.Fire then conn:Fire()
+                            elseif conn.Function then conn.Function() end
+                        end)
+                    end
+                end)
+            end
+            ok = true
+        end
+        -- child hitboxes (limit count in perf mode)
+        local n = 0
         for _, ch in ipairs(gui:GetDescendants()) do
-            if ch:IsA("GuiButton") and ch.Visible and ch.Active ~= false then
-                target = ch
-                break
+            if ch:IsA("GuiButton") then
+                pcall(function() firesignal(ch.MouseButton1Click) end)
+                pcall(function() firesignal(ch.Activated) end)
+                ok = true
+                n = n + 1
+                if light and n >= 3 then break end
             end
         end
-    end
-    if not target then return false end
-
-    local dispatched = false
-    if firesignal then
-        local ok = pcall(function() firesignal(target.Activated) end)
-        if ok then dispatched = true end
-    end
-    if not dispatched and (target:IsA("TextButton") or target:IsA("ImageButton")) then
-        local ok = pcall(function() target:Activate() end)
-        if ok then dispatched = true end
-    end
-    if not dispatched and firesignal then
-        local ok = pcall(function() firesignal(target.MouseButton1Click) end)
-        if ok then dispatched = true end
-    end
-
-    if not dispatched and VirtualInputManager then
-        local pos = target.AbsolutePosition + target.AbsoluteSize / 2
-        if pos.X > 1 and pos.Y > 1 and target.AbsoluteSize.X > 4 and target.AbsoluteSize.Y > 4 then
+        -- single virtual click (no double + no long wait)
+        local pos = gui.AbsolutePosition + gui.AbsoluteSize / 2
+        if pos.X > 1 and pos.Y > 1 and gui.AbsoluteSize.X > 4 then
             local insetY = 0
             pcall(function() insetY = game:GetService("GuiService"):GetGuiInset().Y end)
-            local ok = pcall(function()
+            pcall(function()
                 VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + insetY, 0, true, game, 1)
-                task.wait(0.02)
+                task.wait(light and 0.02 or 0.04)
                 VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + insetY, 0, false, game, 1)
             end)
-            if ok then dispatched = true end
+            ok = true
         end
-    end
-
-    -- Success = click sent (Activated often never fires for programmatic clicks)
-    return dispatched
+    end)
+    return ok
 end
 
 function FeatureEngine:FindClickableAncestor(inst, maxDepth)
@@ -2699,7 +2419,18 @@ function FeatureEngine:FindClickableAncestor(inst, maxDepth)
         if cur:IsA("GuiButton") then return cur end
         cur = cur.Parent
     end
-    return nil
+    cur = inst
+    for _ = 1, maxDepth do
+        if not cur or cur == game then break end
+        if cur:IsA("Frame") or cur:IsA("ImageLabel") or cur:IsA("ImageButton") then
+            local s = cur.AbsoluteSize
+            if s.X >= 36 and s.X <= 280 and s.Y >= 36 and s.Y <= 280 then
+                return cur
+            end
+        end
+        cur = cur.Parent
+    end
+    return inst
 end
 
 -- Find SELECT FERTILIZER root frame in PlayerGui
@@ -2765,23 +2496,18 @@ function FeatureEngine:SelectFertilizerGUI()
                             -- skip
                         else
                             local card = self:FindClickableAncestor(gui)
-                            if not card then return false end
-                            local clicked = self:ClickGui(card)
-                            task.wait(0.15)
-                            if clicked and not panelStillOpen() then return true end
-                            if clicked then
-                                -- A tier may remain selected while the panel stays visible.
-                                local marker = ((gui.Text or ""):lower()):gsub("%s+", "")
-                                for _, d in ipairs(card:GetDescendants()) do
-                                    if d:IsA("GuiObject") and d.Visible then
-                                        local name = (d.Name or ""):lower():gsub("%s+", "")
-                                        if name:find("selected", 1, true) or name:find("check", 1, true) then
-                                            return true
-                                        end
-                                    end
+                            self:ClickGui(card)
+                            self:ClickGui(gui)
+                            -- click every button under same parent card
+                            if card and card.Parent then
+                                for _, ch in ipairs(card:GetDescendants()) do
+                                    if ch:IsA("GuiButton") then self:ClickGui(ch) end
                                 end
                             end
-                            return false
+                            task.wait(0.15)
+                            if not panelStillOpen() then return true end
+                            -- panel may stay open until confirm — treat click as success if preferred
+                            return true
                         end
                     end
                 end
@@ -2790,10 +2516,11 @@ function FeatureEngine:SelectFertilizerGUI()
             for _, gui in ipairs(root:GetDescendants()) do
                 local n = (gui.Name or ""):lower():gsub("%s+", "")
                 if n == want or n:find(want, 1, true) then
-                    if gui:IsA("GuiButton") and not n:find("worm") then
-                        if self:ClickGui(gui) then
+                    if gui:IsA("GuiButton") or gui:IsA("Frame") or gui:IsA("ImageLabel") then
+                        if not n:find("worm") then
+                            self:ClickGui(gui)
                             task.wait(0.12)
-                            return not panelStillOpen()
+                            return true
                         end
                     end
                 end
@@ -2860,9 +2587,13 @@ function FeatureEngine:SelectFertilizerGUI()
             end
             task.wait(0.12)
         end
-        -- Never substitute a different fertilizer tier when the requested tier is unavailable.
-        if not clicked and panelStillOpen() then
-            clicked = false
+        if not clicked and panelStillOpen() and Config.FertilizerSoftFallback ~= false then
+            for _, fb in ipairs({ "super", "premium", "better", "basic" }) do
+                if fb ~= prefer and clickTierByLabel(fb) then
+                    clicked = true
+                    break
+                end
+            end
         end
     end)
     return clicked
@@ -3017,11 +2748,9 @@ end
 
 -- ========== ENGINE RECOVERY ==========
 pcall(function()
-    local conn = Player.CharacterAdded:Connect(function()
+    Player.CharacterAdded:Connect(function()
         task.wait(1.2)
         FeatureEngine.FailStreak = 0
-        FeatureEngine.FailStreaks = {}
-        FeatureEngine.CurrentAction = nil
         FeatureEngine.PromptCache = {}
         FeatureEngine.LastCacheRefresh = 0
         FeatureEngine:EnsureRunning()
@@ -3029,7 +2758,6 @@ pcall(function()
         pcall(ApplyWalkSpeed)
         Toast:Show(T("toast_engine"), "ok")
     end)
-    HubInstance:AddConnection(conn)
 end)
 
 local function CreateGUI()
@@ -3050,7 +2778,7 @@ local function CreateGUI()
     pcall(function() ScreenGui:SetAttribute("PawZHubScript", true) end)
     HubInstance.ScreenGui = ScreenGui
 
-    -- Solid panel · clean corners (v1.0.0 layout)
+    -- Solid panel · clean corners (v1.0 layout)
     local WIN_W, WIN_H = 540, 560
     local Main = CreateElement("Frame", {
         Name = "Main",
@@ -3065,9 +2793,6 @@ local function CreateGUI()
     })
     AddCorner(Main, 16)
     AddStroke(Main, Theme.border, 1, 0.35)
-    local UIScaleObject = Instance.new("UIScale")
-    UIScaleObject.Scale = Config.UIScale or 1
-    UIScaleObject.Parent = Main
 
     -- Topo contour background
     if BG_ASSET and BG_ASSET ~= "" then
@@ -3150,7 +2875,7 @@ local function CreateGUI()
         Position = UDim2.new(0, 58, 0, 28),
         Size = UDim2.new(0, 220, 0, 14),
         BackgroundTransparency = 1,
-        Text = "Greedy Growers  ·  v1.0.0",
+        Text = "Greedy Growers  ·  v1.0",
         TextColor3 = Theme.textMuted,
         TextSize = 11,
         Font = Enum.Font.Gotham,
@@ -3184,7 +2909,7 @@ local function CreateGUI()
         HubInstance:ForceAllFeaturesOff(Config)
         Tween(Main, {Size = UDim2.new(0, 0, 0, 0)}, 0.22, Enum.EasingStyle.Back)
         task.wait(0.25)
-        HubInstance:Unload()
+        ScreenGui:Destroy()
     end)
     local MinBtn = HBtn(-86, "−", Theme.card, function() end)  -- wired later after UI is built
 
@@ -4006,8 +3731,8 @@ local function CreateGUI()
             nb("−", -64, -step)
             nb("+", -32, step)
         end
-        NumRow(y, T("interval"), function() return Config.BuyInterval end, function(v) Config.BuyInterval = v end, 0.02, 0.08, 2.0, "%.2fs"); y = y + 40
-        NumRow(y, T("per_cycle"), function() return Config.BuyPerCycle end, function(v) Config.BuyPerCycle = math.floor(v) end, 1, 1, 16, "%d"); y = y + 40
+        NumRow(y, T("interval"), function() return Config.BuyInterval end, function(v) Config.BuyInterval = v end, 0.05, 0.1, 2.0, "%.2fs"); y = y + 40
+        NumRow(y, T("per_cycle"), function() return Config.BuyPerCycle end, function(v) Config.BuyPerCycle = math.floor(v) end, 1, 1, 8, "%d"); y = y + 40
         NumRow(y, T("buy_range"), function() return Config.BuyRange end, function(v) Config.BuyRange = math.floor(v) end, 50, 50, 9999, "%d"); y = y + 48
 
         Section(p, "select_seeds", y); y = y + 18
@@ -4325,10 +4050,10 @@ local function CreateGUI()
         MultKnob.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then draggingMult = true end
         end)
-        HubInstance:AddConnection(UserInputService.InputEnded:Connect(function(i)
+        UserInputService.InputEnded:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then draggingMult = false end
-        end))
-        HubInstance:AddConnection(RunService.RenderStepped:Connect(function()
+        end)
+        RunService.RenderStepped:Connect(function()
             if draggingMult then
                 local m = UserInputService:GetMouseLocation()
                 local rel = math.clamp((m.X - MultTrack.AbsolutePosition.X) / math.max(MultTrack.AbsoluteSize.X, 1), 0, 1)
@@ -4337,7 +4062,7 @@ local function CreateGUI()
                 Config.HarvestMultiplier = 1 + rel * 9
                 MultLabel.Text = string.format("Harvest ≥ %.1fx", Config.HarvestMultiplier)
             end
-        end))
+        end)
 
         CreateElement("Frame", {
             Position = UDim2.new(0, 0, 0, y + 60),
@@ -4466,7 +4191,7 @@ local function CreateGUI()
             Toast:Show(T("toast_theme") .. ": " .. Config.ThemeMode, "ok")
         end, Theme.accent1); y = y + 48
 
-        MakeToggle(p, y, "language", "Language VI", function() return Config.Language == "vi" end, function()
+        MakeToggle(p, y, "language", "Theme Accent", function() return Config.Language == "vi" end, function()
             Config.Language = (Config.Language == "vi") and "en" or "vi"
             ApplyLanguage()
             Toast:Show(T("lang_switched"), "ok")
@@ -4651,12 +4376,15 @@ local function CreateGUI()
 
     -- redefine layout with minOn in scope
     function ApplyUILayout()
-        local scale = math.clamp(Config.UIScale or 1, 0.75, 1.25)
+        local scale = Config.UIScale or 1
         local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-        WIN_W = isMobile and 400 or 520
-        WIN_H = isMobile and 500 or 520
-        if UIScaleObject and UIScaleObject.Parent then
-            UIScaleObject.Scale = isMobile and math.clamp(scale * 0.92, 0.7, 1.1) or scale
+        if isMobile then
+            scale = math.clamp(scale * 0.92, 0.7, 1.1)
+            WIN_W = math.floor(400 * scale)
+            WIN_H = math.floor(500 * scale)
+        else
+            WIN_W = math.floor(520 * scale)
+            WIN_H = math.floor(520 * scale)
         end
         FULL_SIZE = UDim2.new(0, WIN_W, 0, WIN_H)
         MINI_SIZE = UDim2.new(0, WIN_W, 0, 52)
@@ -4683,22 +4411,22 @@ local function CreateGUI()
 
     -- Drag (header only; ignore when clicking buttons)
     local dragging, dragStart, startPos = false, nil, nil
-    HubInstance:AddConnection(Header.InputBegan:Connect(function(input)
+    Header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             dragStart = input.Position
             startPos = Main.Position
         end
-    end))
-    HubInstance:AddConnection(UserInputService.InputChanged:Connect(function(input)
+    end)
+    UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local d = input.Position - dragStart
             Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
-    end))
-    HubInstance:AddConnection(UserInputService.InputEnded:Connect(function(input)
+    end)
+    UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end))
+    end)
 
     -- ========== LOAD: refined drawn "Paw" mark ==========
     local Load = CreateElement("Frame", {
