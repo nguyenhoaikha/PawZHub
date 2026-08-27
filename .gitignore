@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Bot
+bot/.env
+bot/dist/
+
+# Web
+web/.next/
+web/.env
+web/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Maps
+*.map
