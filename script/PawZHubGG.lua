@@ -621,12 +621,27 @@ function ConfigIO:Load()
         Toast:Show(T("toast_no_cfg"), "warn")
         return false
     end
-    local data = decodeJSON(raw)
+    local data = nil
+    -- Try HttpService first (most reliable)
+    pcall(function()
+        data = game:GetService("HttpService"):JSONDecode(raw)
+    end)
+    -- Fallback to custom decoder
     if not data then
-        -- try HttpService again
+        data = decodeJSON(raw)
+    end
+    -- Last resort: minimal manual parse for flat key-value
+    if not data and raw:sub(1,1) == '{' then
         pcall(function()
-            data = game:GetService("HttpService"):JSONDecode(raw)
+            data = {}
+            for k, v in raw:gmatch('"([^"]+)"%s*:%s*([^",}]+)') do
+                if v == 'true' then data[k] = true
+                elseif v == 'false' then data[k] = false
+                elseif tonumber(v) then data[k] = tonumber(v)
+                else data[k] = v:match('^"(.*)"$') or v end
+            end
         end)
+        if data and next(data) == nil then data = nil end
     end
     if type(data) ~= "table" then
         Toast:Show(T("toast_cfg_fail"), "warn")
@@ -934,8 +949,6 @@ Player.CharacterAdded:Connect(function()
     task.wait(0.5)
     ApplyWalkSpeed()
 end)
-
-
 
 
 -- ========== OPTIMIZED FEATURE ENGINE ==========
@@ -2138,7 +2151,23 @@ function FeatureEngine:Start()
         end
         if now - (self.LastTick or 0) < iv then return end
         self.LastTick = now
+        -- Frame budget: cap Tick execution to ~12ms per frame to prevent lag spikes
+        local tickStart = os.clock()
+        local TICK_BUDGET = 0.012
         self:Tick()
+        local elapsed = os.clock() - tickStart
+        if elapsed > TICK_BUDGET then
+            -- Over budget: increase interval next frame to compensate
+            self.LastTick = now + (elapsed - TICK_BUDGET)
+        end
+        -- Cleanup stale RecentBuys every 10 seconds to prevent memory leak
+        if not self._lastCleanup or (now - self._lastCleanup) > 10 then
+            self._lastCleanup = now
+            local cutoff = now - 5
+            for k, v in pairs(self.RecentBuys or {}) do
+                if v < cutoff then self.RecentBuys[k] = nil end
+            end
+        end
     end)
     HubInstance:AddConnection(self.Connection)
 end
@@ -2755,7 +2784,7 @@ pcall(function()
         FeatureEngine.LastCacheRefresh = 0
         FeatureEngine:EnsureRunning()
         if Config.AntiAFK then pcall(function() AntiAFK:Start() end) end
-        pcall(ApplyWalkSpeed)
+        -- ApplyWalkSpeed already handled by its own CharacterAdded above
         Toast:Show(T("toast_engine"), "ok")
     end)
 end)
@@ -4574,66 +4603,76 @@ local function CreateGUI()
         return t
     end
 
-    task.spawn(function()
-        local openTw = tw(Main, {Size = UDim2.new(0, WIN_W, 0, WIN_H)}, 0.42)
-        openTw.Completed:Wait()
-        task.wait(0.05)
+task.spawn(function()
+    -- Guard: abort if GUI was destroyed before animation starts
+    if not Main or not Main.Parent then return end
+    local openTw = tw(Main, {Size = UDim2.new(0, WIN_W, 0, WIN_H)}, 0.42)
+    openTw.Completed:Wait()
+    task.wait(0.05)
+    if not Load or not Load.Parent then return end
 
-        -- Ring
-        tw(ring, {Size = UDim2.new(0, 88, 0, 88)}, 0.45, Enum.EasingStyle.Quint)
-        tw(ringStroke, {Transparency = 0.72}, 0.4)
+    -- Ring
+    tw(ring, {Size = UDim2.new(0, 88, 0, 88)}, 0.45, Enum.EasingStyle.Quint)
+    tw(ringStroke, {Transparency = 0.72}, 0.4)
 
-        -- Toes: outer pair then inner pair (balanced)
-        for _, idx in ipairs({1, 4, 2, 3}) do
-            local t = toes[idx]
-            tw(t.f, {
-                Size = UDim2.new(0, t.w, 0, t.h),
-                BackgroundTransparency = 0
-            }, 0.26, Enum.EasingStyle.Back)
-            task.wait(0.055)
-        end
-
-        -- Pad
-        tw(pad, {
-            Size = UDim2.new(0, 28, 0, 24),
+    -- Toes: outer pair then inner pair (balanced)
+    for _, idx in ipairs({1, 4, 2, 3}) do
+        if not Load or not Load.Parent then return end
+        local t = toes[idx]
+        tw(t.f, {
+            Size = UDim2.new(0, t.w, 0, t.h),
             BackgroundTransparency = 0
-        }, 0.3, Enum.EasingStyle.Back)
-        task.wait(0.15)
+        }, 0.26, Enum.EasingStyle.Back)
+        task.wait(0.055)
+    end
 
-        -- Letters
-        for i, lab in ipairs(letters) do
-            lab.Position = UDim2.new(0, (i - 1) * cellW, 0, 6)
-            tw(lab, {
-                TextTransparency = 0,
-                Position = UDim2.new(0, (i - 1) * cellW, 0, 0)
-            }, 0.28, Enum.EasingStyle.Quint)
-            task.wait(0.08)
-        end
+    if not Load or not Load.Parent then return end
+    -- Pad
+    tw(pad, {
+        Size = UDim2.new(0, 28, 0, 24),
+        BackgroundTransparency = 0
+    }, 0.3, Enum.EasingStyle.Back)
+    task.wait(0.15)
 
-        -- Underline
-        tw(under, {
-            Size = UDim2.new(0, 72, 0, 2),
-            BackgroundTransparency = 0
-        }, 0.32, Enum.EasingStyle.Quint)
-        task.wait(0.12)
+    if not Load or not Load.Parent then return end
+    -- Letters
+    for i, lab in ipairs(letters) do
+        if not Load or not Load.Parent then return end
+        lab.Position = UDim2.new(0, (i - 1) * cellW, 0, 6)
+        tw(lab, {
+            TextTransparency = 0,
+            Position = UDim2.new(0, (i - 1) * cellW, 0, 0)
+        }, 0.28, Enum.EasingStyle.Quint)
+        task.wait(0.08)
+    end
 
-        status.Text = "Ready"
-        tw(status, {TextTransparency = 0}, 0.2)
-        task.wait(0.3)
+    if not Load or not Load.Parent then return end
+    -- Underline
+    tw(under, {
+        Size = UDim2.new(0, 72, 0, 2),
+        BackgroundTransparency = 0
+    }, 0.32, Enum.EasingStyle.Quint)
+    task.wait(0.12)
 
-        -- Exit
-        tw(Load, {BackgroundTransparency = 1}, 0.25)
-        tw(ringStroke, {Transparency = 1}, 0.2)
-        for _, t in ipairs(toes) do
-            tw(t.f, {BackgroundTransparency = 1}, 0.2)
-        end
-        tw(pad, {BackgroundTransparency = 1}, 0.2)
-        tw(under, {BackgroundTransparency = 1}, 0.2)
-        for _, lab in ipairs(letters) do
-            tw(lab, {TextTransparency = 1}, 0.2)
-        end
-        tw(status, {TextTransparency = 1}, 0.2)
-        task.wait(0.26)
+    if not Load or not Load.Parent then return end
+    status.Text = "Ready"
+    tw(status, {TextTransparency = 0}, 0.2)
+    task.wait(0.3)
+
+    if not Load or not Load.Parent then return end
+    -- Exit
+    tw(Load, {BackgroundTransparency = 1}, 0.25)
+    tw(ringStroke, {Transparency = 1}, 0.2)
+    for _, t in ipairs(toes) do
+        tw(t.f, {BackgroundTransparency = 1}, 0.2)
+    end
+    tw(pad, {BackgroundTransparency = 1}, 0.2)
+    tw(under, {BackgroundTransparency = 1}, 0.2)
+    for _, lab in ipairs(letters) do
+        tw(lab, {TextTransparency = 1}, 0.2)
+    end
+    tw(status, {TextTransparency = 1}, 0.2)
+    task.wait(0.26)
 
         if Load and Load.Parent then
             Load:Destroy()
