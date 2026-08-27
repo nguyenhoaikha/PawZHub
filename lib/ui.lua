@@ -223,7 +223,7 @@ local function newLabel(parent, text, size, weight, color, richText)
     l.BackgroundTransparency = 1
     l.Text     = text
     l.TextSize = size or 14
-    l.Font     = Enum.Font.GothamSemiBold
+    l.Font     = Enum.Font.GothamBold
     if weight then l.Font = weight end
     l.TextColor3   = color or Color3.fromRGB(220, 220, 240)
     l.TextXAlignment = Enum.TextXAlignment.Left
@@ -580,7 +580,7 @@ function Hub:Tab(name)
     btn.BorderSizePixel  = 0
     btn.Text             = name
     btn.TextSize         = 12
-    btn.Font             = Enum.Font.GothamSemiBold
+    btn.Font             = Enum.Font.GothamBold
     btn.TextColor3       = T.TabText
     btn.LayoutOrder      = idx
     btn.Parent           = self._sidebar
@@ -758,7 +758,7 @@ function Hub:_tabAPI(entry, page)
         lbl.Size       = UDim2.new(1, -58, 1, 0)
         lbl.Text       = label
         lbl.TextSize   = 13
-        lbl.Font       = Enum.Font.GothamSemiBold
+        lbl.Font       = Enum.Font.GothamBold
         lbl.TextColor3 = T.Text
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent     = f
@@ -838,7 +838,7 @@ function Hub:_tabAPI(entry, page)
         lbl.Size       = UDim2.new(0.7, 0, 1, 0)
         lbl.Text       = label
         lbl.TextSize   = 13
-        lbl.Font       = Enum.Font.GothamSemiBold
+        lbl.Font       = Enum.Font.GothamBold
         lbl.TextColor3 = T.Text
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent     = labelRow
@@ -967,7 +967,7 @@ function Hub:_tabAPI(entry, page)
         btn.BackgroundTransparency = 1
         btn.Text              = label
         btn.TextSize          = 13
-        btn.Font              = Enum.Font.GothamSemiBold
+        btn.Font              = Enum.Font.GothamBold
         btn.TextColor3        = c.text
         btn.BorderSizePixel   = 0
         btn.Parent            = f
@@ -1007,7 +1007,7 @@ function Hub:_tabAPI(entry, page)
         lbl.Size       = UDim2.new(0.5, 0, 1, 0)
         lbl.Text       = label
         lbl.TextSize   = 13
-        lbl.Font       = Enum.Font.GothamSemiBold
+        lbl.Font       = Enum.Font.GothamBold
         lbl.TextColor3 = T.Text
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent     = f
@@ -1018,7 +1018,7 @@ function Hub:_tabAPI(entry, page)
         valBtn.BackgroundColor3 = T.SliderBar
         valBtn.Text             = selected
         valBtn.TextSize         = 12
-        valBtn.Font             = Enum.Font.GothamSemiBold
+        valBtn.Font             = Enum.Font.GothamBold
         valBtn.TextColor3       = T.Text
         valBtn.BorderSizePixel  = 0
         valBtn.Parent           = f
@@ -1078,7 +1078,7 @@ function Hub:_tabAPI(entry, page)
                 item.BackgroundColor3 = (opt == selected) and T.Accent or T.Surface
                 item.Text             = opt
                 item.TextSize         = 12
-                item.Font             = Enum.Font.GothamSemiBold
+                item.Font             = Enum.Font.GothamBold
                 item.TextColor3       = (opt == selected) and Color3.fromRGB(255,255,255) or T.Text
                 item.BorderSizePixel  = 0
                 item.LayoutOrder      = i
@@ -1133,7 +1133,7 @@ function Hub:_tabAPI(entry, page)
         lbl.Size       = UDim2.new(0.6, 0, 1, 0)
         lbl.Text       = label
         lbl.TextSize   = 13
-        lbl.Font       = Enum.Font.GothamSemiBold
+        lbl.Font       = Enum.Font.GothamBold
         lbl.TextColor3 = T.Text
         lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Parent     = f
@@ -1212,7 +1212,7 @@ function Hub:Notify(message, kind, duration)
     msgLbl.Size      = UDim2.new(1, -16, 1, 0)
     msgLbl.Text      = message
     msgLbl.TextSize  = 12
-    msgLbl.Font      = Enum.Font.GothamSemiBold
+    msgLbl.Font      = Enum.Font.GothamBold
     msgLbl.TextColor3= T.Text
     msgLbl.TextXAlignment = Enum.TextXAlignment.Left
     msgLbl.TextWrapped= true
