@@ -15,44 +15,28 @@ local GET_KEY_URL = SITE_URL .. "/getkey"
 -- Game scripts: after a successful key verification, the modal
 -- closes and the right script loads automatically. Add a new entry
 -- for each game you support. scriptUrl is the raw GitHub URL of the
--- .lua file in the PawZHub repo's /games directory.
+-- .lua file in the PawZHub repo's /script directory.
+--
+-- Structure:   loader.lua -> checkkey.lua -> script/<game>.lua
+--
+-- Currently supported (free, no key required):
+--   2753915549      Blox Fruits       script/PawZHubBF.lua
+--   74102906764176  Greedy Growers    script/PawZHubGG.lua
 local GITHUB_RAW = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main"
 local SUPPORTED_GAMES = {
     -- ===== Free (no key required) =====
-    [2753915549]      = { name = "Blox Fruits",           scriptPath = "games/PawZHubBF.lua" },
-    [74102906764176]  = { name = "Greedy Growers",        scriptPath = "games/PawZHubGG.lua" },
-    [4616652839]      = { name = "Shindo Life",           scriptPath = "games/shindo-life.lua" },
-    [17017911970]     = { name = "Anime Expeditions",     scriptPath = "games/anime-expeditions.lua" },
-    [117612316652]    = { name = "Highschool Hoops",      scriptPath = "games/highschool-hoops.lua" },
-    [81128789072]     = { name = "Practical Basketball",  scriptPath = "games/practical-basketball.lua" },
-    [17625359962]     = { name = "Grow A Chicken Fighter",scriptPath = "games/grow-a-chicken.lua" },
-    [14367520663]     = { name = "Throw A Coin",          scriptPath = "games/throw-a-coin.lua" },
-    [72920620366355]  = { name = "Operation One",         scriptPath = "games/operation-one.lua" },
-    -- ===== Premium games (key required) =====
-    [1458767429]      = { name = "ABA",                    scriptPath = "games/aba.lua" },
-    [6735572261]      = { name = "Pilgrammed",             scriptPath = "games/pilgrammed.lua" },
-    [6270290407]      = { name = "VV: Ultimatum",          scriptPath = "games/vv-ultimatum.lua" },
-    [131079272918660] = { name = "Devil Hunter",           scriptPath = "games/devil-hunter.lua" },
-    [14704917953]     = { name = "Dokkodo",                scriptPath = "games/dokkodo.lua" },
-    [5571328985]      = { name = "Bloodlines",             scriptPath = "games/bloodlines.lua" },
-    [99449877692519]  = { name = "Bridger Western",        scriptPath = "games/bridger.lua" },
-    [128736949265057] = { name = "Gakuran",                scriptPath = "games/gakuran.lua" },
-    [10449761463]     = { name = "The Strongest Battlegrounds", scriptPath = "games/tsb.lua" },
-    [13927562399]     = { name = "Havoc",                  scriptPath = "games/havoc.lua" },
-    [13876564679]     = { name = "Highschool Hoops (Pro)", scriptPath = "games/highschool-hoops.lua" },
-    [16361990076]     = { name = "Grand Alfheim",          scriptPath = "games/grand-alfheim.lua" },
-    [13358463560]     = { name = "Asura",                  scriptPath = "games/asura.lua" },
-    [4588604953]      = { name = "Criminality",            scriptPath = "games/criminality.lua" },
-    [91792475213200]  = { name = "Above The Rim",          scriptPath = "games/above-the-rim.lua" },
-    [115681808123944] = { name = "Throw A Coin (Pro)",     scriptPath = "games/throw-a-coin.lua" },
-    [17070462969]     = { name = "Voxel Destruct",         scriptPath = "games/voxel-destruct.lua" },
-    [80681221431821]  = { name = "Practical Basketball (Pro)", scriptPath = "games/practical-basketball.lua" },
-    [86544322519715]  = { name = "Horse Racing Legends",   scriptPath = "games/horse-racing.lua" },
-    [100096058035179] = { name = "MS:KEN",                 scriptPath = "games/ms-ken.lua" },
-    [94640181989498]  = { name = "Grow A Chicken Fighter (Pro)", scriptPath = "games/grow-a-chicken.lua" },
-    [18852831741]     = { name = "Ryujin",                 scriptPath = "games/ryujin.lua" },
-    [77649408247578]  = { name = "Dungeon Quest Reborn",   scriptPath = "games/dungeon-quest.lua" },
-    [97598239454123]  = { name = "Grow a Garden 2",        scriptPath = "games/grow-garden-2.lua" },
+    [2753915549]      = {
+        name       = "Blox Fruits",
+        scriptPath = "script/PawZHubBF.lua",
+        tier       = "free",
+        features   = 18,
+    },
+    [74102906764176]  = {
+        name       = "Greedy Growers",
+        scriptPath = "script/PawZHubGG.lua",
+        tier       = "free",
+        features   = 16,
+    },
 }
 
 local CONFIG = {
@@ -268,6 +252,7 @@ end
 -- KEY VERIFICATION
 -- ============================================
 local function verifyKeyRemote(key)
+    -- Rate limit / lockout (local)
     local canProceed, msg = checkRateLimit()
     if not canProceed then return false, msg end
     local lockOk, lockMsg = checkLockout()
@@ -278,11 +263,49 @@ local function verifyKeyRemote(key)
         return false, "Account blacklisted"
     end
 
+    -- Cache hit (skip API call)
     local cached = State.keyCache[key]
     if cached and (os.time() - cached.ts) < CONFIG.CACHE_DURATION then
         return true, "Valid (cached)", cached.data
     end
 
+    -- Delegate to core/keymanager if the loader wired it up.
+    local KeyManager = _G.PawZHub_KeyManager
+    if type(KeyManager) == "table" and type(KeyManager.validate) == "function" then
+        local result = KeyManager.validate(key, {
+            apiUrl   = CONFIG.KEY_CHECK_URL,
+            hwid     = getHWID(),
+            userId   = player.UserId,
+            username = player.Name,
+            placeId  = game.PlaceId,
+            version  = CONFIG.CURRENT_VERSION,
+        })
+        if type(result) ~= "table" then
+            return false, "Key validation failed"
+        end
+        if result.status == "VALID"
+        or result.status == "PREMIUM"
+        or result.status == "FREE" then
+            State.keyCache[key] = { data = result, ts = os.time() }
+            State.failedAttempts = 0
+            State.lockedUntil  = 0
+            return true, result.message or "Valid", result
+        end
+        -- map all the negative statuses to a user-friendly message
+        if result.status == "EXPIRED" then
+            return false, "Your key has expired. Please obtain a new key."
+        elseif result.status == "REVOKED" then
+            return false, "This key has been revoked. Contact support."
+        elseif result.status == "BANNED" then
+            return false, "Your account is banned from PawZHub."
+        elseif result.status == "SERVER_ERROR" then
+            return false, result.message or "Server unreachable — check executor HTTP permissions"
+        end
+        return false, result.message or "Invalid key"
+    end
+
+    -- Fallback: inline HTTP (used if checkkey.lua is loaded directly
+    -- without the loader.lua orchestrator)
     local HttpService = game:GetService("HttpService")
     local requestData = {
         key       = key,
@@ -311,9 +334,6 @@ local function verifyKeyRemote(key)
         end
     end
 
-    -- All HTTP methods failed. The script always needs network to
-    -- reach getpawzhub.vercel.app, so an empty response here means
-    -- the executor's HTTP layer is broken (or the user is offline).
     return false, "Server unreachable — check executor HTTP permissions"
 end
 
@@ -1045,9 +1065,9 @@ local function createKeyUI(callback, executorInfo)
         Parent = body,
     })
 
-    -- Info strip (game + executor)
+    -- Info strip (game + executor + tier)
     local infoStrip = CreateElement("Frame", {
-        Size = UDim2.new(1, 0, 0, 48),
+        Size = UDim2.new(1, 0, 0, 64),
         Position = UDim2.new(0, 0, 0, 168),
         BackgroundColor3 = T.surfaceAlt,
         BorderSizePixel = 0,
@@ -1056,23 +1076,28 @@ local function createKeyUI(callback, executorInfo)
     AddCorner(infoStrip, 8)
     AddStroke(infoStrip, T.border, 1, 0)
 
-    local gameName = SUPPORTED_GAMES[game.PlaceId] and SUPPORTED_GAMES[game.PlaceId].name or "Unknown Game"
-    local execName = (executorInfo and executorInfo.name) or "Unknown"
+    local gameEntry  = SUPPORTED_GAMES[game.PlaceId]
+    local gameName   = gameEntry and gameEntry.name or "Unknown Game"
+    local gameTier   = (gameEntry and gameEntry.tier or "free"):upper()
+    local gameFeat   = gameEntry and gameEntry.features or 0
+    local execName   = (executorInfo and executorInfo.name) or "Unknown"
+    local platformName = (executorInfo and executorInfo.platform) or "PC"
 
+    -- Game column (left)
     CreateElement("TextLabel", {
-        Size = UDim2.new(1, -16, 0, 16),
-        Position = UDim2.new(0, 10, 0, 8),
+        Size = UDim2.new(0.55, -8, 0, 12),
+        Position = UDim2.new(0, 10, 0, 6),
         BackgroundTransparency = 1,
         Text = "Game",
         TextColor3 = T.textDim,
-        TextSize = 10,
+        TextSize = 9,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = infoStrip,
     })
     CreateElement("TextLabel", {
-        Size = UDim2.new(1, -16, 0, 16),
-        Position = UDim2.new(0, 10, 0, 24),
+        Size = UDim2.new(0.55, -8, 0, 16),
+        Position = UDim2.new(0, 10, 0, 19),
         BackgroundTransparency = 1,
         Text = gameName,
         TextColor3 = T.text,
@@ -1082,22 +1107,34 @@ local function createKeyUI(callback, executorInfo)
         TextTruncate = Enum.TextTruncate.AtEnd,
         Parent = infoStrip,
     })
-
-    -- Executor on the right side of the strip
+    -- Tier + features count
     CreateElement("TextLabel", {
-        Size = UDim2.new(0.45, 0, 0, 16),
-        Position = UDim2.new(0.55, 0, 0, 8),
+        Size = UDim2.new(0.55, -8, 0, 14),
+        Position = UDim2.new(0, 10, 0, 41),
+        BackgroundTransparency = 1,
+        Text = gameTier .. "  ·  " .. tostring(gameFeat) .. " features",
+        TextColor3 = T.textMuted,
+        TextSize = 9,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = infoStrip,
+    })
+
+    -- Executor + platform column (right)
+    CreateElement("TextLabel", {
+        Size = UDim2.new(0.45, -10, 0, 12),
+        Position = UDim2.new(0.55, 0, 0, 6),
         BackgroundTransparency = 1,
         Text = "Executor",
         TextColor3 = T.textDim,
-        TextSize = 10,
+        TextSize = 9,
         Font = Enum.Font.Gotham,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = infoStrip,
     })
     CreateElement("TextLabel", {
-        Size = UDim2.new(0.45, 0, 0, 16),
-        Position = UDim2.new(0.55, 0, 0, 24),
+        Size = UDim2.new(0.45, -10, 0, 16),
+        Position = UDim2.new(0.55, 0, 0, 19),
         BackgroundTransparency = 1,
         Text = execName,
         TextColor3 = T.text,
@@ -1105,6 +1142,17 @@ local function createKeyUI(callback, executorInfo)
         Font = Enum.Font.GothamMedium,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
+        Parent = infoStrip,
+    })
+    CreateElement("TextLabel", {
+        Size = UDim2.new(0.45, -10, 0, 14),
+        Position = UDim2.new(0.55, 0, 0, 41),
+        BackgroundTransparency = 1,
+        Text = platformName .. "  ·  v" .. CONFIG.CURRENT_VERSION,
+        TextColor3 = T.textMuted,
+        TextSize = 9,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
         Parent = infoStrip,
     })
 
@@ -1402,41 +1450,56 @@ end
 -- ============================================
 -- PUBLIC API
 -- ============================================
-function CheckKeySystem.show(callback)
-    createKeyUI(callback, detectExecutor())
-end
+-- ============================================
+-- ENTRY POINT
+-- ============================================
+-- loader.lua calls us as: checkkeyFn(Loader, detection)
+-- where Loader is a table with {Config, Utils, Detector, Version,
+-- Session, KeyManager, Router, Error, onSuccess} and detection is
+-- the result from core/detector.
+--
+-- Legacy: calling us with no args just returns the CheckKeySystem
+-- module (so older scripts that did require-style still work).
 
-function CheckKeySystem.hasFeature(featureName)
-    local valid, session = CheckKeySystem.verifySession()
-    if not valid then return false end
-    for _, f in ipairs(session.keyFeatures or {}) do
-        if f == featureName then return true end
+local function entry(Loader, detection)
+    -- 1. Update CONFIG with whatever the loader provided
+    if type(Loader) == "table" and type(Loader.Config) == "table" then
+        local cfg = Loader.Config
+        if type(cfg.SITE_URL) == "string" then SITE_URL = cfg.SITE_URL end
+        if type(cfg.DISCORD_URL) == "string" then
+            CONFIG.DISCORD_URL = cfg.DISCORD_URL
+        end
+        if type(cfg.API) == "table" and type(cfg.API.KEY_CHECK) == "string" then
+            CONFIG.KEY_CHECK_URL = cfg.API.KEY_CHECK
+        end
+        if type(cfg.API) == "table" and type(cfg.API.HWID_RESET) == "string" then
+            CONFIG.HWID_RESET_URL = cfg.API.HWID_RESET
+        end
+        if type(cfg.VERSION) == "string" then
+            CONFIG.CURRENT_VERSION = cfg.VERSION
+        end
+        -- publish Config + helpers on globals so other modules can
+        -- find them without re-importing
+        _G.PawZHub_Config    = cfg
+        _G.PawZHub_CheckKey = CheckKeySystem
     end
-    return false
+
+    -- 2. Show the key UI
+    local function onVerified(ok, payload)
+        if type(Loader) == "table" and type(Loader.onSuccess) == "function" then
+            if ok and type(payload) == "table" then
+                Loader.onSuccess(payload)
+            else
+                -- old-style callback (boolean, message). forward as
+                -- INVALID so the loader can handle it
+                Loader.onSuccess({ status = "INVALID", message = tostring(payload or "denied") })
+            end
+        end
+    end
+    createKeyUI(onVerified, detectExecutor())
+
+    return CheckKeySystem
 end
 
-function CheckKeySystem.getKeyType()
-    local valid, session = CheckKeySystem.verifySession()
-    if not valid then return nil end
-    return session.keyType
-end
-
-function CheckKeySystem.getSession()
-    local valid, session = CheckKeySystem.verifySession()
-    if not valid then return nil end
-    return session
-end
-
-function CheckKeySystem.isAuthenticated()
-    return CheckKeySystem.verifySession()
-end
-
-function CheckKeySystem.getHWID()
-    return getHWID()
-end
-
-function CheckKeySystem.getConfig()
-    return CONFIG
-end
-
-return CheckKeySystem
+-- If called with no args, expose the module (legacy require-style).
+return entry
