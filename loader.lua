@@ -67,9 +67,10 @@ local function notify(title, text, duration)
 end
 
 -- Render a single-line progress bar that updates in place.
--- Uses \r so most executor consoles overwrite the same line.
+-- All calls use \r so the executor console overwrites the same line.
 local PROGRESS_LABEL = "PawZHub Loading"
 local PROGRESS_WIDTH = 20
+local _lastProgressLine = ""
 local function renderProgress(pct)
     if type(pct) ~= "number" then pct = 0 end
     if pct < 0 then pct = 0 end
@@ -78,17 +79,23 @@ local function renderProgress(pct)
     local bar = string.rep("\u{2588}", filled) .. string.rep("\u{2591}", PROGRESS_WIDTH - filled)
     return string.format("%s [%s] %d%%", PROGRESS_LABEL, bar, pct)
 end
-local function setProgress(pct)
+local function setProgress(pct, extra)
+    -- Build the full line
     local line = renderProgress(pct)
+    if extra and extra ~= "" then
+        line = line .. "  " .. extra
+    end
+    -- Pad to previous width so leftover chars from longer lines don't bleed
+    if #line < #_lastProgressLine then
+        line = line .. string.rep(" ", #_lastProgressLine - #line)
+    end
+    _lastProgressLine = line
     pcall(function() io.write("\r" .. line) io.flush() end)
 end
-local function finishProgress(pct, finalText)
-    -- print with a newline so subsequent log lines are clean
-    local line = renderProgress(pct or 100)
-    if finalText and finalText ~= "" then
-        line = line .. "  " .. finalText
-    end
-    print(line)
+-- Short alias so existing calls don't need changing
+local function finishProgress(pct, extra)
+    setProgress(pct, extra)
+    print("") -- newline after the final progress line
 end
 
 -- ========================================================
@@ -113,19 +120,19 @@ setProgress(0)
 local REPO_RAW = "https://raw.githubusercontent.com/nguyenhoaikha/PawZHub/main"
 local configSrc = httpGet(REPO_RAW .. "/config.lua")
 if not configSrc then
-    finishProgress(0, "ERROR: cannot reach GitHub raw")
+    setProgress(0, "ERROR: cannot reach GitHub raw")
     notify("PawZHub", "Could not fetch config.lua. Check executor HTTP permissions.", 8)
     return
 end
 local configFn, configErr = loadstring(configSrc)
 if not configFn then
-    finishProgress(0, "ERROR: config.lua syntax")
+    setProgress(0, "ERROR: config.lua syntax")
     notify("PawZHub", "config.lua syntax error: " .. tostring(configErr), 8)
     return
 end
 local Config = configFn()
 if type(Config) ~= "table" then
-    finishProgress(0, "ERROR: config.lua returned non-table")
+    setProgress(0, "ERROR: config.lua returned non-table")
     return
 end
 
@@ -137,19 +144,19 @@ end
 local function fetchAndLoad(name)
     local src = httpGet(REPO_RAW .. "/" .. name)
     if not src then
-        finishProgress(0, "ERROR: missing " .. name)
+        setProgress(0, "ERROR: missing " .. name)
         notify("PawZHub", "Failed to download " .. name, 8)
         return nil
     end
     local fn, err = loadstring(src)
     if not fn then
-        finishProgress(0, "ERROR: " .. name .. " compile")
+        setProgress(0, "ERROR: " .. name .. " compile")
         notify("PawZHub", name .. " syntax error: " .. tostring(err), 8)
         return nil
     end
     local ok, res = pcall(fn)
     if not ok then
-        finishProgress(0, "ERROR: " .. name .. " runtime")
+        setProgress(0, "ERROR: " .. name .. " runtime")
         notify("PawZHub", name .. " runtime error: " .. tostring(res), 8)
         return nil
     end
@@ -198,8 +205,8 @@ local detection = Detector.detect(PLACE_ID, Config.GAMES)
 if detection.status ~= "SUPPORTED" then
     -- Unsupported: print the "not supported" banner, toast, stop.
     local summary = Detector.supportSummary(Config.GAMES)
-    finishProgress(50, "")
-    print(summary)
+    setProgress(50, "")
+    print("\n" .. summary)
     notify("PawZHub — Unsupported",
           "This game is not supported. Supported: " ..
           table.concat(Router.listNames(Config.GAMES), ", "), 10)
@@ -230,7 +237,7 @@ if detection.status ~= "SUPPORTED" then
     end)
     return
 end
-finishProgress(50, detection.name .. " detected (" .. detection.code .. ")")
+setProgress(50, detection.name .. " detected (" .. detection.code .. ")")
 
 -- ========================================================
 -- STEP 3: soft version check (never blocks boot)
@@ -244,14 +251,14 @@ local verCheck = Version.check({
     jsonDecode = _G.PawZHub_JsonDecode,
 })
 if verCheck.status == Version.STATUS.OUTDATED then
-    finishProgress(60, "OUTDATED: " .. tostring(verCheck.latest) .. " available")
+    setProgress(60, "OUTDATED: " .. tostring(verCheck.latest) .. " available")
     notify("PawZHub",
           "A new version is available.\nCurrent: " .. Config.VERSION ..
           "\nLatest: " .. tostring(verCheck.latest), 10)
 elseif verCheck.status == Version.STATUS.OK then
-    finishProgress(60, "up to date (v" .. tostring(verCheck.latest) .. ")")
+    setProgress(60, "up to date (v" .. tostring(verCheck.latest) .. ")")
 else
-    finishProgress(60, "version check skipped")
+    setProgress(60, "version check skipped")
 end
 
 -- ========================================================
@@ -261,12 +268,12 @@ setProgress(70)
 local Player = game:GetService("Players").LocalPlayer
 local checkkeySrc = httpGet(REPO_RAW .. "/checkkey.lua")
 if not checkkeySrc then
-    finishProgress(70, "ERROR: missing checkkey.lua")
+    setProgress(70, "ERROR: missing checkkey.lua")
     return
 end
 local checkkeyFn, checkkeyErr = loadstring(checkkeySrc)
 if not checkkeyFn then
-    finishProgress(70, "ERROR: checkkey.lua syntax")
+    setProgress(70, "ERROR: checkkey.lua syntax")
     notify("PawZHub", "checkkey.lua syntax error: " .. tostring(checkkeyErr), 8)
     return
 end
@@ -285,7 +292,7 @@ local Loader = {
     Error      = ErrorHandler,
     onSuccess  = function(keyResult)
         -- 80% — key validated, create session
-        setProgress(80)
+        setProgress(80, "session creating")
         local session = Session.create(keyResult, {
             userId   = Player and Player.UserId,
             username = Player and Player.Name,
@@ -293,30 +300,29 @@ local Loader = {
             platform = PLATFORM,
         })
         if not session then
-            finishProgress(80, "ERROR: could not create session")
+            setProgress(80, "ERROR: could not create session")
             ErrorHandler.fatal(ErrorHandler.KIND.KEY, "Could not create session")
             return
         end
-        finishProgress(80, "session created")
+        setProgress(80, "session created")
 
         -- 90% — load the per-game module
-        setProgress(90)
+        setProgress(90, "loading game script")
         local loadRes = Router.load(detection, { repoBase = REPO_RAW })
         if not loadRes.ok then
-            finishProgress(90, "ERROR: " .. (loadRes.error or ""))
+            setProgress(90, "ERROR: " .. (loadRes.error or ""))
             ErrorHandler.fatal(ErrorHandler.KIND.GAME_MODULE, loadRes.error)
             return
         end
 
-        -- 100%
-        finishProgress(100, "loaded " .. (loadRes.name or "module"))
-        print("[PawZHub] Ready.")
+        -- 100% — done
+        finishProgress(100, "Ready! " .. (loadRes.name or "module") .. " loaded")
     end,
 }
 
 local ok, runErr = pcall(checkkeyFn, Loader, detection)
 if not ok then
-    finishProgress(70, "ERROR: checkkey.lua runtime")
+    setProgress(70, "ERROR: checkkey.lua runtime")
     ErrorHandler.fatal(ErrorHandler.KIND.API, "checkkey.lua runtime error: " .. tostring(runErr))
     return
 end
